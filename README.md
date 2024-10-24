@@ -112,7 +112,7 @@ Clone this repository and build the package
 ```
 
 ```
-5. Run the person-following node
+Run the person-following node
 ```
     source /opt/ros/foxy/setup.bash
     source ~/ros2_ws/install/setup.bash
