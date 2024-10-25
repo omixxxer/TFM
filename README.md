@@ -102,9 +102,10 @@ Visualize the pose of the robot and the Lidar scan from a laptop terminal:
 
 Download the tb2.rviz configuration file and execute the commands in a laptop terminal:
 
-    source /opt/ros/foxy/setup.bash
-    export ROS_DOMAIN_ID=24 # or 25,26,27
-    rviz2 -d tb2.rviz
+    source /opt/ros/humble/setup.bash
+    export ROS_DOMAIN_ID=24  # o 25, 26, 27
+    rviz2 -d Descargas/tb2.rviz
+
 
 Create a ROS 2 workspace
 ```
@@ -116,14 +117,14 @@ Clone this repository and build the package
     cd ~/ros2_ws/src
     git clone https://github.com/omixxxer/TFM.git
     cd ..
-    source /opt/ros/foxy/setup.bash
+    source /opt/ros/humble/setup.bash
     colcon build --symlink-install
 ```
 
 ```
 Run the person-following node
 ```
-    source /opt/ros/foxy/setup.bash
+    source /opt/ros/humble/setup.bash
     source ~/ros2_ws/install/setup.bash
     export ROS_DOMAIN_ID=24 # or 25,26,27
     ros2 run person_follower person_follower 
