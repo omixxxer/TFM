@@ -128,7 +128,7 @@ Run the person-following node
     source /opt/ros/humble/setup.bash
     source ~/ros2_ws/install/setup.bash
     export ROS_DOMAIN_ID=24 # or 25,26,27
-    ros2 run person_follower person_follower 
+    ros2 run person_follower person_follower --ros-args -r cmd_vel:=/commands/velocity
 
 
 ---------------------------------------------
