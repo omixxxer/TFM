@@ -108,28 +108,28 @@ Download the tb2.rviz configuration file and execute the commands in a laptop te
 
 
 Create a ROS 2 workspace
-```
+
     mkdir -p ~/ros2_ws/src
-```
+
 
 Clone this repository and build the package
-```
+
     cd ~/ros2_ws/src
     git clone https://github.com/omixxxer/TFM.git
     cd ..
     source /opt/ros/humble/setup.bash
     colcon build --symlink-install
-```
+
 
 
 Run the person-following node
 
-```
+
     source /opt/ros/humble/setup.bash
     source ~/ros2_ws/install/setup.bash
     export ROS_DOMAIN_ID=24 # or 25,26,27
     ros2 run person_follower person_follower 
-```
+
 
 ---------------------------------------------
 SIM
