@@ -136,11 +136,11 @@ SIM
 
 We assume that [ROS 2](https://docs.ros.org/) and [Webots](https://cyberbotics.com/) are installed in the system. 
 
-For the steps below we use ROS2 Foxy and Webots R2022b.
+For the steps below we use ROS2 Humble and Webots R2022b.
 
 1. Install the prerequisites
 ```
-sudo apt install ros-foxy-webots-ros2-turtlebot
+sudo apt install ros-humble-webots-ros2-turtlebot
 ```
 2. Create a ROS 2 workspace
 ```
@@ -151,17 +151,17 @@ mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
 git clone https://github.com/RobInLabUJI/person_follower.git
 cd ..
-source /opt/ros/foxy/setup.bash
+source /opt/ros/humble/setup.bash
 colcon build --symlink-install
 ```
 4. Copy the Webots world file to the ROS package folder
 ```
 sudo cp ~/ros2_ws/src/person_follower/webots/*.wbt \
-        /opt/ros/foxy/share/webots_ros2_turtlebot/worlds/.
+        /opt/ros/humble/share/webots_ros2_turtlebot/worlds/.
 ```
 5. Run the person-following node
 ```
-source /opt/ros/foxy/setup.bash
+source /opt/ros/humble/setup.bash
 source ~/ros2_ws/install/setup.bash
 export ROS_LOCALHOST_ONLY=1
 ros2 run person_follower person_follower 
@@ -171,7 +171,7 @@ ros2 run person_follower person_follower
 In a room with walls:
 ```
 export WEBOTS_HOME=~/webots-R2022b
-source /opt/ros/foxy/setup.bash
+source /opt/ros/humble/setup.bash
 export ROS_LOCALHOST_ONLY=1
 ros2 launch webots_ros2_turtlebot robot_launch.py \
   world:=turtlebot3_burger_pedestrian_simple.wbt
@@ -180,7 +180,7 @@ ros2 launch webots_ros2_turtlebot robot_launch.py \
 Or a room without walls:
 ```
 export WEBOTS_HOME=~/webots-R2022b
-source /opt/ros/foxy/setup.bash
+source /opt/ros/humble/setup.bash
 export ROS_LOCALHOST_ONLY=1
 ros2 launch webots_ros2_turtlebot robot_launch.py \
   world:=turtlebot3_burger_pedestrian_no_walls.wbt
@@ -188,7 +188,7 @@ ros2 launch webots_ros2_turtlebot robot_launch.py \
 
 7. In a new terminal, launch RViz
 ```
-source /opt/ros/foxy/setup.bash
+source /opt/ros/humble/setup.bash
 export ROS_LOCALHOST_ONLY=1
 rviz2 -d ~/ros2_ws/src/person_follower/webots/config.rviz
 ```
