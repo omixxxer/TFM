@@ -51,22 +51,20 @@ Aquí tienes un resumen de cada uno de los nodos que has seleccionado, junto con
 Ejemplo de Estructura Simplificada del Proyecto
 Aquí te muestro cómo podría quedar la estructura de tu proyecto con los nodos seleccionados:
 
-  makefile
-  Copiar código
-  person_follower/
-  │
-  ├── launch/
-  │   ├── launch_all_nodes.py
-  │
-  ├── src/
-  │   ├── control_node.py          # Nodo de Control
-  │   ├── camera_node.py           # Nodo de Cámara
-  │   ├── detection_node.py        # Nodo de Detección (incluyendo detección de obstáculos)
-  │   ├── tracking_node.py         # Nodo de Seguimiento (incluyendo planificación de movimientos)
-  │   ├── collision_handling_node.py  # Nodo de Manejo de Colisiones
-  │   └── user_interface_node.py    # Nodo de Interfaz de Usuario
-  │
-  ├── include/
-  │   └── person_follower/
-  │
-  └── CMakeLists.txt
+    person_follower/
+    │
+    ├── launch/
+    │   ├── launch_all_nodes.py
+    │
+    ├── src/
+    │   ├── control_node.py          # Nodo de Control
+    │   ├── camera_node.py           # Nodo de Cámara
+    │   ├── detection_node.py        # Nodo de Detección (incluyendo detección de obstáculos)
+    │   ├── tracking_node.py         # Nodo de Seguimiento (incluyendo planificación de movimientos)
+    │   ├── collision_handling_node.py  # Nodo de Manejo de Colisiones
+    │   └── user_interface_node.py    # Nodo de Interfaz de Usuario
+    │
+    ├── include/
+    │   └── person_follower/
+    │
+    └── CMakeLists.txt
