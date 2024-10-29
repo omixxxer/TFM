@@ -26,7 +26,7 @@ Connection between a laptop and the TurtleBot 2
 Prerequisites:
 
     The laptop must be connected to the WiFi PIROBOTNET6 or PIROBOTNET6_5G
-    The laptop must have ROS 2 Foxy installed
+    The laptop must have ROS 2 Humble installed
 
 Connection with ssh:
 
