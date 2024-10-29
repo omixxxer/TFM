@@ -27,41 +27,46 @@ Aquí tienes un resumen de cada uno de los nodos que has seleccionado, junto con
     Calcular la trayectoria y las velocidades necesarias para seguir a la persona detectada.
     Integrar la planificación de movimientos para ajustar el movimiento del robot según la posición de la persona.
     Publicar los comandos de movimiento (velocidad lineal y angular) para el robot.
+   
 5. Nodo de Manejo de Colisiones
-Responsabilidades:
+  Responsabilidades:
 
-Suscribirse a los datos del LIDAR y a los bumpers del robot.
-Detectar y manejar colisiones inminentes, publicando comandos para detener o desviar el robot si es necesario.
-6. Nodo de Interfaz de Usuario
-Responsabilidades:
+    Suscribirse a los datos del LIDAR y a los bumpers del robot.
+    Detectar y manejar colisiones inminentes, publicando comandos para detener o desviar el robot si es necesario.
+   
+7. Nodo de Interfaz de Usuario
+  Responsabilidades:
+  
+    Proporcionar una interfaz gráfica para mostrar el estado del robot y las detecciones.
+    Permitir el control manual del robot, si es necesario.
+    Recibir comandos del usuario y publicarlos a los nodos correspondientes.
 
-Proporcionar una interfaz gráfica para mostrar el estado del robot y las detecciones.
-Permitir el control manual del robot, si es necesario.
-Recibir comandos del usuario y publicarlos a los nodos correspondientes.
-7. Nodo de Detección de Obstáculos (integrado en el Nodo de Detección)
-Responsabilidades:
+8. Nodo de Detección de Obstáculos (integrado en el Nodo de Detección)
+  Responsabilidades:
+    
+    Implementar algoritmos específicos para la detección de obstáculos en el entorno del robot.
+    Informar al nodo de detección sobre la presencia de obstáculos, permitiendo que se tomen decisiones informadas.
 
-Implementar algoritmos específicos para la detección de obstáculos en el entorno del robot.
-Informar al nodo de detección sobre la presencia de obstáculos, permitiendo que se tomen decisiones informadas.
+
 Ejemplo de Estructura Simplificada del Proyecto
 Aquí te muestro cómo podría quedar la estructura de tu proyecto con los nodos seleccionados:
 
-makefile
-Copiar código
-person_follower/
-│
-├── launch/
-│   ├── launch_all_nodes.py
-│
-├── src/
-│   ├── control_node.py          # Nodo de Control
-│   ├── camera_node.py           # Nodo de Cámara
-│   ├── detection_node.py        # Nodo de Detección (incluyendo detección de obstáculos)
-│   ├── tracking_node.py         # Nodo de Seguimiento (incluyendo planificación de movimientos)
-│   ├── collision_handling_node.py  # Nodo de Manejo de Colisiones
-│   └── user_interface_node.py    # Nodo de Interfaz de Usuario
-│
-├── include/
-│   └── person_follower/
-│
-└── CMakeLists.txt
+  makefile
+  Copiar código
+  person_follower/
+  │
+  ├── launch/
+  │   ├── launch_all_nodes.py
+  │
+  ├── src/
+  │   ├── control_node.py          # Nodo de Control
+  │   ├── camera_node.py           # Nodo de Cámara
+  │   ├── detection_node.py        # Nodo de Detección (incluyendo detección de obstáculos)
+  │   ├── tracking_node.py         # Nodo de Seguimiento (incluyendo planificación de movimientos)
+  │   ├── collision_handling_node.py  # Nodo de Manejo de Colisiones
+  │   └── user_interface_node.py    # Nodo de Interfaz de Usuario
+  │
+  ├── include/
+  │   └── person_follower/
+  │
+  └── CMakeLists.txt
