@@ -123,12 +123,6 @@ In a laptop terminal execute the commands:
 
 The displayed average rate should be around 20-30 Hz.
 
-Visualize the camera footage in real time from a laptop terminal:
-
-    source /opt/ros/humble/setup.bash
-    python3 camera_viewer.py
-
-
 Create a ROS 2 workspace
 
     mkdir -p ~/ros2_ws/src
@@ -142,6 +136,11 @@ Clone this repository and build the package
     source /opt/ros/humble/setup.bash
     colcon build --symlink-install
 
+Visualize the camera footage in real time from a laptop terminal:
+
+    source /opt/ros/humble/setup.bash
+    source ~/ros2_ws/install/setup.bash
+    ros2 run person_follower camera_viewer.py
 
 
 Run the person-following node
