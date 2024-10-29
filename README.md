@@ -106,6 +106,13 @@ Download the tb2.rviz configuration file and execute the commands in a laptop te
     export ROS_DOMAIN_ID=24  # o 25, 26, 27
     rviz2 -d Descargas/tb2.rviz
 
+Run the ROS Camera node:
+
+In an ssh terminal execute the commands:
+
+    source /opt/ros/humble/setup.bash
+    ros2 run usb_cam usb_cam_node_exe
+
 
 Create a ROS 2 workspace
 
