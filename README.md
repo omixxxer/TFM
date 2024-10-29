@@ -111,7 +111,22 @@ Run the ROS Camera node:
 In an ssh terminal execute the commands:
 
     source /opt/ros/humble/setup.bash
-    ros2 run usb_cam usb_cam_node_exe
+    ros2 run usb_cam usb_cam_node_exe --ros-args -p image_width:=320 -p image_height:=240 -p framerate:=30.0
+
+
+Check  the /scan topic from a laptop terminal:
+
+In a laptop terminal execute the commands:  
+
+    source /opt/ros/humble/setup.bash
+    ros2 topic hz /image_raw
+
+The displayed average rate should be around 20-30 Hz.
+
+Visualize the camera footage in real time from a laptop terminal:
+
+    source /opt/ros/humble/setup.bash
+    python3 camera_viewer.py
 
 
 Create a ROS 2 workspace
