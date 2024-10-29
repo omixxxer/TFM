@@ -1,30 +1,32 @@
 Aquí tienes un resumen de cada uno de los nodos que has seleccionado, junto con sus responsabilidades y sugerencias sobre cómo podrían interactuar:
 
 1. Nodo de Control
-Responsabilidades:
-
-Coordinar la comunicación entre los demás nodos.
-Gestionar la lógica general del sistema y tomar decisiones basadas en la información recibida.
-Monitorear el estado del robot y de los otros nodos.
-2. Nodo de Cámara
-Responsabilidades:
-
-Capturar imágenes en tiempo real desde la cámara del robot.
-Publicar las imágenes en un topic (por ejemplo, /image_raw).
-Convertir las imágenes de ROS a un formato que se pueda usar con OpenCV.
+  Responsabilidades:
+    Coordinar la comunicación entre los demás nodos.
+    Gestionar la lógica general del sistema y tomar decisiones basadas en la información recibida.
+    Monitorear el estado del robot y de los otros nodos.
+   
+3. Nodo de Cámara
+  Responsabilidades:
+    
+    Capturar imágenes en tiempo real desde la cámara del robot.
+    Publicar las imágenes en un topic (por ejemplo, /image_raw).
+    Convertir las imágenes de ROS a un formato que se pueda usar con OpenCV.
+   
 3. Nodo de Detección
-Responsabilidades:
-
-Suscribirse a los datos de la cámara y/o LIDAR.
-Implementar algoritmos para detectar personas y obstáculos.
-Publicar la información de detección (por ejemplo, si se detecta una persona u obstáculo).
-4. Nodo de Seguimiento
-Responsabilidades:
-
-Suscribirse a los datos del nodo de detección.
-Calcular la trayectoria y las velocidades necesarias para seguir a la persona detectada.
-Integrar la planificación de movimientos para ajustar el movimiento del robot según la posición de la persona.
-Publicar los comandos de movimiento (velocidad lineal y angular) para el robot.
+  Responsabilidades:
+  
+    Suscribirse a los datos de la cámara y/o LIDAR.
+    Implementar algoritmos para detectar personas y obstáculos.
+    Publicar la información de detección (por ejemplo, si se detecta una persona u obstáculo).
+   
+5. Nodo de Seguimiento
+  Responsabilidades:
+  
+    Suscribirse a los datos del nodo de detección.
+    Calcular la trayectoria y las velocidades necesarias para seguir a la persona detectada.
+    Integrar la planificación de movimientos para ajustar el movimiento del robot según la posición de la persona.
+    Publicar los comandos de movimiento (velocidad lineal y angular) para el robot.
 5. Nodo de Manejo de Colisiones
 Responsabilidades:
 
