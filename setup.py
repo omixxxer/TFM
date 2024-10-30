@@ -5,7 +5,15 @@ package_name = 'person_follower'
 setup(
     name=package_name,
     version='0.0.0',
-    packages=[package_name],
+    packages=[
+        'person_follower',
+        'person_follower.control_node',
+        'person_follower.camera_node',
+        'person_follower.detection_node',
+        'person_follower.tracking_node',
+        'person_follower.collision_handling_node',
+        'person_follower.user_interface_node'
+    ],
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
@@ -13,14 +21,20 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='ecervera',
-    maintainer_email='ecervera@uji.es',
-    description='TODO: Package description',
+    maintainer='omixer',
+    maintainer_email='al364109@uji.es',
+    description='Person follower package',
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-        	'person_follower = person_follower.person_follower:main',
+            'control_node = person_follower.control_node.control_node:main',
+            'camera_node = person_follower.camera_node.camera_node:main',
+            'detection_node = person_follower.detection_node.detection_node:main',
+            'tracking_node = person_follower.tracking_node.tracking_node:main',
+            'collision_handling_node = person_follower.collision_handling_node.collision_handling_node:main',
+            'user_interface_node = person_follower.user_interface_node.user_interface_node:main',
         ],
     },
 )
+
