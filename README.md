@@ -47,15 +47,6 @@ In an ssh terminal execute the commands:
     export ROS_DOMAIN_ID=24  # o 25, 26, 27 según el robot
     ros2 launch kobuki_node kobuki_node-launch.py
 
-*Depending on the ROS distribution could be foxy or humble
-
-
-Use these numbers for each robot:
-ROS_DOMAIN_ID 	IP address
-24 	192.168.0.224
-25 	192.168.0.225
-26 	192.168.0.226
-27 	192.168.0.227
 
 Teleoperate the TurtleBot 2 from a laptop terminal:
 
@@ -65,13 +56,6 @@ In a laptop terminal execute the commands:
     export ROS_DOMAIN_ID=24  # o 25, 26, 27
     ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=/commands/velocity
     
-
-Check that adicional dependencies are installed: 
-
-    sudo apt install ros-humble-kobuki-node
-    sudo apt install ros-humble-rplidar-ros
-
-
 Run the ROS Lidar node:
 
 In an ssh terminal execute the commands:
@@ -95,16 +79,8 @@ In a laptop terminal execute the commands:
     export ROS_DOMAIN_ID=24  # o 25, 26, 27
     ros2 topic hz /scan
 
-
 The displayed average rate should be around 10.9 Hz.
 
-Visualize the pose of the robot and the Lidar scan from a laptop terminal:
-
-Download the tb2.rviz configuration file and execute the commands in a laptop terminal:
-
-    source /opt/ros/humble/setup.bash
-    export ROS_DOMAIN_ID=24  # o 25, 26, 27
-    rviz2 -d Descargas/tb2.rviz
 
 Run the ROS Camera node:
 
@@ -123,10 +99,10 @@ In a laptop terminal execute the commands:
 
 The displayed average rate should be around 20-30 Hz.
 
+
 Create a ROS 2 workspace
 
     mkdir -p ~/ros2_ws/src
-
 
 Clone this repository and build the package
 
@@ -136,6 +112,27 @@ Clone this repository and build the package
     source /opt/ros/humble/setup.bash
     colcon build --symlink-install
 
+
+Visualize the pose of the robot and the Lidar scan from a laptop terminal:
+
+Execute the commands in a laptop terminal:
+
+    source /opt/ros/humble/setup.bash
+    export ROS_DOMAIN_ID=24  # o 25, 26, 27
+    rviz2 -d ros2_ws/rviz/tb2.rviz
+    
+Visualize the camera footage, we can do it with the Rviz2 or with a opencv window:
+
+RVIZ
+---
+Execute the commands in a laptop terminal:
+        
+            source /opt/ros/humble/setup.bash
+            export ROS_DOMAIN_ID=24  # o 25, 26, 27
+            rviz2 -d ros2_ws/rviz/camera.rviz
+
+LAPTOP TERMINAL
+-----
 Visualize the camera footage in real time from a laptop terminal:
 
     source /opt/ros/humble/setup.bash
@@ -145,72 +142,7 @@ Visualize the camera footage in real time from a laptop terminal:
 
 Run the person-following node
 
-
     source /opt/ros/humble/setup.bash
     source ~/ros2_ws/install/setup.bash
     export ROS_DOMAIN_ID=24 # or 25,26,27
     ros2 run person_follower person_follower --ros-args -r cmd_vel:=/commands/velocity
-
-
----------------------------------------------
-SIM
----------------------------------------------
-
-We assume that [ROS 2](https://docs.ros.org/) and [Webots](https://cyberbotics.com/) are installed in the system. 
-
-For the steps below we use ROS2 Humble and Webots R2022b.
-
-1. Install the prerequisites
-```
-sudo apt install ros-humble-webots-ros2-turtlebot
-```
-2. Create a ROS 2 workspace
-```
-mkdir -p ~/ros2_ws/src
-```
-3. Clone this repository and build the package
-```
-cd ~/ros2_ws/src
-git clone https://github.com/RobInLabUJI/person_follower.git
-cd ..
-source /opt/ros/humble/setup.bash
-colcon build --symlink-install
-```
-4. Copy the Webots world file to the ROS package folder
-```
-sudo cp ~/ros2_ws/src/person_follower/webots/*.wbt \
-        /opt/ros/humble/share/webots_ros2_turtlebot/worlds/.
-```
-5. Run the person-following node
-```
-source /opt/ros/humble/setup.bash
-source ~/ros2_ws/install/setup.bash
-export ROS_LOCALHOST_ONLY=1
-ros2 run person_follower person_follower 
-```
-6. In a new terminal, launch the Webots simulator
-
-In a room with walls:
-```
-export WEBOTS_HOME=~/webots-R2022b
-source /opt/ros/humble/setup.bash
-export ROS_LOCALHOST_ONLY=1
-ros2 launch webots_ros2_turtlebot robot_launch.py \
-  world:=turtlebot3_burger_pedestrian_simple.wbt
-```
-
-Or a room without walls:
-```
-export WEBOTS_HOME=~/webots-R2022b
-source /opt/ros/humble/setup.bash
-export ROS_LOCALHOST_ONLY=1
-ros2 launch webots_ros2_turtlebot robot_launch.py \
-  world:=turtlebot3_burger_pedestrian_no_walls.wbt
-```
-
-7. In a new terminal, launch RViz
-```
-source /opt/ros/humble/setup.bash
-export ROS_LOCALHOST_ONLY=1
-rviz2 -d ~/ros2_ws/src/person_follower/webots/config.rviz
-```
