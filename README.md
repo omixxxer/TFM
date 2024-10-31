@@ -107,7 +107,7 @@ Create a ROS 2 workspace
 Clone this repository and build the package
 
     cd ~/ros2_ws/src
-    git clone https://github.com/omixxxer/TFM.git
+    git clone https://github.com/omixxxer/TFM.git .
     cd ..
     source /opt/ros/humble/setup.bash
     colcon build --symlink-install
@@ -125,11 +125,11 @@ Visualize the camera footage, we can do it with the Rviz2 or with a opencv windo
 
 RVIZ
 ---
-Execute the commands in a laptop terminal:
-        
-            source /opt/ros/humble/setup.bash
-            export ROS_DOMAIN_ID=24  # o 25, 26, 27
-            rviz2 -d ros2_ws/rviz/camera.rviz
+Execute the commands in a laptop terminal   
+
+    source /opt/ros/humble/setup.bash
+    export ROS_DOMAIN_ID=24  # o 25, 26, 27
+    rviz2 -d ros2_ws/rviz/camera.rviz
 
 LAPTOP TERMINAL
 -----
