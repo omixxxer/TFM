@@ -1,3 +1,4 @@
+# collision_handling_node/collision_handling_node.py
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
@@ -8,12 +9,15 @@ class CollisionHandlingNode(Node):
         super().__init__('collision_handling_node')
         self.lidar_subscriber = self.create_subscription(LaserScan, '/scan', self.lidar_callback, 10)
         self.cmd_vel_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.min_distance = 0.4
         self.get_logger().info("Nodo de Manejo de Colisiones iniciado")
 
     def lidar_callback(self, msg):
-        if min(msg.ranges) < 0.4:  # Si un obstáculo está cerca
-            twist = Twist()
-            twist.linear.x = 0.0  # Detener el robot
+        twist = Twist()
+        if min(msg.ranges) < self.min_distance:
+            twist.linear.x = 0.0
+            twist.angular.z = 0.0
+            self.get_logger().warn("Colisión detectada, publicando comando de parada")
             self.cmd_vel_publisher.publish(twist)
 
 def main(args=None):
@@ -25,4 +29,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
