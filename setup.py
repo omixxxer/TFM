@@ -7,12 +7,12 @@ package_name = 'person_follower'
 setup(
     name=package_name,
     version='0.0.0',
-    packages=['person_follower'],
+    packages=[package_name],
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        # Añade esta línea para incluir todos los archivos de lanzamiento
-        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
+        # Incluye la carpeta launch y otros recursos si es necesario
+        (os.path.join('share', package_name, 'launch'), glob('person_follower/launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
