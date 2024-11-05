@@ -7,6 +7,14 @@ from cv_bridge import CvBridge
 class CameraNode(Node):
     def __init__(self):
         super().__init__('camera_node')
+        
+        # Verificar si el nodo está habilitado
+        self.declare_parameter('enabled', True)
+        self.enabled = self.get_parameter('enabled').value
+        if not self.enabled:
+            self.get_logger().info("Nodo de Cámara desactivado.")
+            return  # Salir si el nodo está desactivado
+        
         self.publisher_ = self.create_publisher(Image, '/camera/image_raw', 10)
         self.cap = cv2.VideoCapture(0)
         self.bridge = CvBridge()
@@ -30,7 +38,8 @@ class CameraNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = CameraNode()
-    rclpy.spin(node)
+    if node.enabled:
+    	rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
 

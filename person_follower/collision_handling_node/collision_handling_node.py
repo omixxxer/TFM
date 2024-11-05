@@ -1,24 +1,27 @@
-# collision_handling_node/collision_handling_node.py
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
-from geometry_msgs.msg import Twist
+from std_msgs.msg import Bool
 
 class CollisionHandlingNode(Node):
     def __init__(self):
         super().__init__('collision_handling_node')
         self.lidar_subscriber = self.create_subscription(LaserScan, '/scan', self.lidar_callback, 10)
-        self.cmd_vel_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
-        self.min_distance = 0.4
+        self.collision_publisher = self.create_publisher(Bool, '/collision_detected', 10)
+        self.min_distance = 0.2  # Distancia mínima para activar colisión
+        self.collision_active = False  # Estado de la colisión
         self.get_logger().info("Nodo de Manejo de Colisiones iniciado")
 
     def lidar_callback(self, msg):
-        twist = Twist()
-        if min(msg.ranges) < self.min_distance:
-            twist.linear.x = 0.0
-            twist.angular.z = 0.0
-            self.get_logger().warn("Colisión detectada, publicando comando de parada")
-            self.cmd_vel_publisher.publish(twist)
+        # Detecta si hay un obstáculo a menos de `min_distance`
+        collision_detected = min(msg.ranges) < self.min_distance
+        if collision_detected != self.collision_active:
+            self.collision_active = collision_detected
+            self.collision_publisher.publish(Bool(data=self.collision_active))
+            if collision_detected:
+                self.get_logger().warn("Colisión detectada, informando al Nodo de Control")
+            else:
+                self.get_logger().info("Colisión resuelta, informando al Nodo de Control")
 
 def main(args=None):
     rclpy.init(args=args)
@@ -29,3 +32,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+

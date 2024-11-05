@@ -22,7 +22,7 @@ class DetectionNode(Node):
     def detect_person(self, ranges, angle_min, angle_increment):
         points = []
         for i, r in enumerate(ranges):
-            if r < 1.5:
+            if r < 2:
                 angle = angle_min + i * angle_increment
                 x = r * np.cos(angle)
                 y = r * np.sin(angle)
@@ -56,7 +56,7 @@ class DetectionNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = DetectionNode(enable_visualization=True)
+    node = DetectionNode(enable_visualization=False)
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
