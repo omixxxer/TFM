@@ -1,3 +1,4 @@
+# camera_node/camera_node.py
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
@@ -39,7 +40,7 @@ def main(args=None):
     rclpy.init(args=args)
     node = CameraNode()
     if node.enabled:
-    	rclpy.spin(node)
+        rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
 

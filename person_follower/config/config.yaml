@@ -1,0 +1,27 @@
+control_node:
+  ros__parameters:
+    collision_enabled: True
+    tracking_enabled: False
+    camera_enabled: False
+    ui_enabled: False
+
+tracking_node:
+  ros__parameters:
+    enabled: False
+
+camera_node:
+  ros__parameters:
+    enabled: True
+
+detection_node:
+  ros__parameters:
+    enabled: True
+
+collision_handling_node:
+  ros__parameters:
+    enabled: True
+
+user_interface_node:
+  ros__parameters:
+    enabled: False
+

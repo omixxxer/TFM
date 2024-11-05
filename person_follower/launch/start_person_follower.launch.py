@@ -1,20 +1,30 @@
-# start_person_follower.launch.py
 from launch import LaunchDescription
 from launch_ros.actions import Node
+import os
+from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
+    config_path = os.path.join(
+        get_package_share_directory('person_follower'),
+        'config',
+        'config.yaml'
+    )
+
     return LaunchDescription([
         Node(
             package='person_follower',
             executable='control_node',
             name='control_node',
             output='screen',
-            parameters=[
-                {'collision_enabled': False},  # Activa o desactiva el nodo de colisión aquí
-                {'tracking_enabled': True},   # Activa o desactiva el nodo de seguimiento
-                {'camera_enabled': True},     # Activa o desactiva el nodo de cámara
-                {'ui_enabled': True}          # Activa o desactiva el nodo de interfaz de usuario
-            ],
+            parameters=[config_path],
+            remappings=[('/cmd_vel', '/commands/velocity')]
+        ),
+        Node(
+            package='person_follower',
+            executable='tracking_node',
+            name='tracking_node',
+            output='screen',
+            parameters=[config_path],
             remappings=[('/cmd_vel', '/commands/velocity')]
         ),
         Node(
@@ -22,36 +32,28 @@ def generate_launch_description():
             executable='camera_node',
             name='camera_node',
             output='screen',
-            parameters=[{'enabled': True}]
+            parameters=[config_path]
         ),
         Node(
             package='person_follower',
             executable='detection_node',
             name='detection_node',
             output='screen',
-            parameters=[{'enabled': True}]
-        ),
-        Node(
-            package='person_follower',
-            executable='tracking_node',
-            name='tracking_node',
-            output='screen',
-            parameters=[{'enabled': True}],
-            remappings=[('/cmd_vel', '/commands/velocity')]
+            parameters=[config_path]
         ),
         Node(
             package='person_follower',
             executable='collision_handling_node',
             name='collision_handling_node',
             output='screen',
-            remappings=[('/cmd_vel', '/commands/velocity')]
+            parameters=[config_path]
         ),
         Node(
             package='person_follower',
             executable='user_interface_node',
             name='user_interface_node',
             output='screen',
-            parameters=[{'enabled': True}]
+            parameters=[config_path]
         )
     ])
 
