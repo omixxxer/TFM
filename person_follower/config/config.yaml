@@ -1,27 +1,29 @@
 control_node:
   ros__parameters:
     collision_enabled: True
-    tracking_enabled: False
-    camera_enabled: False
-    ui_enabled: False
+    tracking_enabled: True
+    camera_enabled: True
+    ui_enabled: True
+    detection_enabled: True
+    collision_handling_enabled: True
 
 tracking_node:
   ros__parameters:
-    enabled: False
+    enabled: True  # Controla si el tracking_node está activo o no
 
 camera_node:
   ros__parameters:
-    enabled: True
+    enabled: True   # Controla si el camera_node está activo o no
 
 detection_node:
   ros__parameters:
-    enabled: True
+    enabled: True   # Controla si el detection_node está activo o no
 
 collision_handling_node:
   ros__parameters:
-    enabled: True
+    enabled: True   # Controla si el collision_handling_node está activo o no
 
 user_interface_node:
   ros__parameters:
-    enabled: False
+    enabled: True  # Controla si el user_interface_node está activo o no
 

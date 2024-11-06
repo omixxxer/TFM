@@ -10,6 +10,15 @@ import matplotlib.pyplot as plt
 class DetectionNode(Node):
     def __init__(self, enable_visualization=True):
         super().__init__('detection_node')
+        
+        # Declaración del parámetro 'enabled' y verificación de activación
+        self.declare_parameter('enabled', True)
+        self.enabled = self.get_parameter('enabled').value
+        if not self.enabled:
+            self.get_logger().info("Nodo de Detección desactivado.")
+            return  # Salir si el nodo está desactivado
+
+        # Inicialización de suscriptores y publicadores solo si el nodo está activo
         self.detection_publisher = self.create_publisher(Bool, '/person_detected', 10)
         self.scan_subscription = self.create_subscription(LaserScan, '/scan', self.lidar_callback, 10)
         self.enable_visualization = enable_visualization
@@ -57,7 +66,8 @@ class DetectionNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = DetectionNode(enable_visualization=False)
-    rclpy.spin(node)
+    if node.enabled:
+        rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
 

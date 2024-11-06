@@ -11,7 +11,7 @@ class TrackingNode(Node):
     def __init__(self):
         super().__init__('tracking_node')
         
-        self.declare_parameter('enabled', False)
+        self.declare_parameter('enabled', True)
         self.enabled = self.get_parameter('enabled').value
         if not self.enabled:
             self.get_logger().info("Nodo de Seguimiento desactivado.")

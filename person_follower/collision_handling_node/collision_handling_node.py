@@ -7,6 +7,15 @@ from std_msgs.msg import Bool
 class CollisionHandlingNode(Node):
     def __init__(self):
         super().__init__('collision_handling_node')
+        
+        # Declaración del parámetro 'enabled' y verificación de activación
+        self.declare_parameter('enabled', True)
+        self.enabled = self.get_parameter('enabled').value
+        if not self.enabled:
+            self.get_logger().info("Nodo de Manejo de Colisiones desactivado.")
+            return  # Salir si el nodo está desactivado
+
+        # Inicialización de suscriptores y publicadores solo si el nodo está activo
         self.lidar_subscriber = self.create_subscription(LaserScan, '/scan', self.lidar_callback, 10)
         self.collision_publisher = self.create_publisher(Bool, '/collision_detected', 10)
         self.min_distance = 0.2  # Distancia mínima para activar colisión
@@ -27,7 +36,8 @@ class CollisionHandlingNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = CollisionHandlingNode()
-    rclpy.spin(node)
+    if node.enabled:
+        rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
 
