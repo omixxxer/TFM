@@ -1,8 +1,8 @@
-# control_node/control_node.py
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Bool
 from geometry_msgs.msg import Twist
+from std_msgs.msg import String
 
 class ControlNode(Node):
     def __init__(self):
@@ -23,9 +23,16 @@ class ControlNode(Node):
         self.ui_enabled = self.get_parameter('ui_enabled').value
         self.detection_enabled = self.get_parameter('detection_enabled').value
         self.collision_handling_enabled = self.get_parameter('collision_handling_enabled').value
+        
+        # Suscripciones a estados de nodos
+        self.create_subscription(String, '/camera/status', self.camera_status_callback, 10)
+        self.create_subscription(String, '/collision_handling/status', self.collision_handling_status_callback, 10)
+        self.create_subscription(String, '/detection/status', self.detection_status_callback, 10)
+        self.create_subscription(String, '/tracking/status', self.tracking_status_callback, 10)
 
-        # Ejemplo de inicialización y lógica condicional para el control
+        # Suscripción a detección de persona
         self.person_detected_sub = self.create_subscription(Bool, '/person_detected', self.person_detected_callback, 10)
+        
         if self.collision_enabled:
             self.collision_sub = self.create_subscription(Bool, '/collision_detected', self.collision_callback, 10)
         
@@ -41,6 +48,18 @@ class ControlNode(Node):
 
         self.get_logger().info("Nodo de Control iniciado con todas las funcionalidades posibles.")
 
+    def camera_status_callback(self, msg):
+        self.get_logger().info(msg.data)
+
+    def collision_handling_status_callback(self, msg):
+        self.get_logger().info(msg.data)
+
+    def detection_status_callback(self, msg):
+        self.get_logger().info(msg.data)
+
+    def tracking_status_callback(self, msg):
+        self.get_logger().info(msg.data)
+
     def person_detected_callback(self, msg):
         if self.detection_enabled and self.tracking_enabled:
             self.person_detected = msg.data
@@ -53,10 +72,9 @@ class ControlNode(Node):
 
     def evaluate_system_state(self):
         if self.collision_detected:
-            if self.current_state != "stopped":
-                self.stop_robot()
-                self.current_state = "stopped"
-                self.get_logger().warn("Deteniendo robot por colisión detectada")
+            self.stop_robot()
+            self.current_state = "stopped"
+            self.get_logger().warn("Deteniendo robot por posible colisión detectada")
         elif self.person_detected and self.tracking_enabled:
             if self.current_state != "following":
                 self.current_state = "following"

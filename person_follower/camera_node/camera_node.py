@@ -4,6 +4,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 import cv2
 from cv_bridge import CvBridge
+from std_msgs.msg import String
 
 class CameraNode(Node):
     def __init__(self):
@@ -14,14 +15,22 @@ class CameraNode(Node):
         self.enabled = self.get_parameter('enabled').value
         if not self.enabled:
             self.get_logger().info("Nodo de Cámara desactivado.")
-            return  # Salir si el nodo está desactivado
-        
+            self.publish_status("Nodo de Cámara desactivado.")
+            return
+            
+           
+        # Publicador de estado
+        self.status_publisher = self.create_publisher(String, '/camera/status', 10)
         self.publisher_ = self.create_publisher(Image, '/camera/image_raw', 10)
         self.cap = cv2.VideoCapture(0)
         self.bridge = CvBridge()
-        self.timer = self.create_timer(0.1, self.publish_image)  # Publicar cada 0.1 segundos
+        self.timer = self.create_timer(0.1, self.publish_image)
         self.get_logger().info("Nodo de Cámara iniciado, publicando en '/camera/image_raw'.")
+        self.publish_status("Nodo de Cámara iniciado.")
 
+    def publish_status(self, message):
+        self.status_publisher.publish(String(data=message))
+    
     def publish_image(self):
         ret, frame = self.cap.read()
         if ret:
