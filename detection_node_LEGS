@@ -1,4 +1,3 @@
-# detection_node/detection_node.py
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
@@ -14,16 +13,16 @@ class DetectionNode(Node):
         
         # Declaración de parámetros ajustables para el nodo de detección
         self.declare_parameter('enabled', True)
-        self.declare_parameter('max_detection_distance', 2.0)
-        self.declare_parameter('min_detection_distance', 0.1)
+        self.declare_parameter('max_detection_distance', 2.5)
+        self.declare_parameter('min_detection_distance', 0.01)
         self.declare_parameter('dbscan_eps', 0.1)
-        self.declare_parameter('dbscan_min_samples', 15)
-        self.declare_parameter('min_leg_cluster_size', 5)
-        self.declare_parameter('max_leg_cluster_size', 50)
-        self.declare_parameter('min_leg_radius', 0.05)
+        self.declare_parameter('dbscan_min_samples', 10)
+        self.declare_parameter('min_leg_cluster_size', 15)
+        self.declare_parameter('max_leg_cluster_size', 45)
+        self.declare_parameter('min_leg_radius', 0.01)
         self.declare_parameter('max_leg_radius', 0.15)
-        self.declare_parameter('min_leg_distance', 0.15)
-        self.declare_parameter('max_leg_distance', 0.5)
+        self.declare_parameter('min_leg_distance', 0.1)
+        self.declare_parameter('max_leg_distance', 0.4)
         
         # Obtener valores de parámetros desde la configuración
         self.enabled = self.get_parameter('enabled').value
@@ -124,16 +123,34 @@ class DetectionNode(Node):
     def plot_clusters(self, points, labels):
         unique_labels = set(labels)
         plt.figure(figsize=(8, 6))
+
         for label in unique_labels:
-            color = 'k' if label == -1 else plt.cm.jet(float(label) / len(unique_labels))
-            xy = points[labels == label]
-            plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=color, markeredgecolor='k', markersize=6)
-        plt.title('DBSCAN Clustering Result')
+            if label == -1:
+                color = 'k'  # Color para el ruido
+                xy = points[labels == label]
+                plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=color, markeredgecolor='k', markersize=6)
+            else:
+                color = plt.cm.jet(float(label) / len(unique_labels))
+                cluster_points = points[labels == label]
+                plt.plot(cluster_points[:, 0], cluster_points[:, 1], 'o', markerfacecolor=color, markeredgecolor='k', markersize=6)
+
+                # Cálculo de tamaño y radio del cluster
+                cluster_size = len(cluster_points)
+                distances = np.linalg.norm(cluster_points - np.mean(cluster_points, axis=0), axis=1)
+                mean_radius = np.mean(distances)
+
+                # Anotación del tamaño y radio en el gráfico
+                centroid = np.mean(cluster_points, axis=0)
+                plt.text(centroid[0], centroid[1], f'Size: {cluster_size}\nRadius: {mean_radius:.2f}m',
+                         fontsize=8, ha='center', color=color)
+
+        plt.title('DBSCAN Clustering Result with Size and Radius Annotations')
         plt.xlabel('X')
         plt.ylabel('Y')
         plt.axis('equal')
         plt.grid()
         plt.show()
+
 
 def main(args=None):
     rclpy.init(args=args)
