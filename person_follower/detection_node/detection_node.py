@@ -23,7 +23,8 @@ class DetectionNode(Node):
         self.declare_parameter('max_leg_radius', 0.15)
         self.declare_parameter('min_leg_distance', 0.1)
         self.declare_parameter('max_leg_distance', 0.4)
-        
+        self.declare_parameter('median_filter_window', 5)  # Nuevo parámetro para el filtro de mediana
+
         # Obtener valores de parámetros desde la configuración
         self.enabled = self.get_parameter('enabled').value
         self.max_detection_distance = self.get_parameter('max_detection_distance').value
@@ -36,6 +37,7 @@ class DetectionNode(Node):
         self.max_leg_radius = self.get_parameter('max_leg_radius').value
         self.min_leg_distance = self.get_parameter('min_leg_distance').value
         self.max_leg_distance = self.get_parameter('max_leg_distance').value
+        self.median_filter_window = self.get_parameter('median_filter_window').value
 
         if not self.enabled:
             self.get_logger().info("Nodo de Detección desactivado.")
@@ -55,10 +57,27 @@ class DetectionNode(Node):
         self.status_publisher.publish(String(data=message))
 
     def lidar_callback(self, msg):
-        person_detected = self.detect_person(msg.ranges, msg.angle_min, msg.angle_increment)
+        # Preprocesamiento de datos: aplicar filtro de mediana
+        ranges_filtered = self.apply_median_filter(msg.ranges, self.median_filter_window)
+
+        # Detección de persona usando los datos filtrados
+        person_detected = self.detect_person(ranges_filtered, msg.angle_min, msg.angle_increment)
         self.detection_publisher.publish(Bool(data=person_detected))
         if person_detected:
             self.get_logger().info("¡Persona detectada!")
+
+    def apply_median_filter(self, data, window_size):
+        """Aplica un filtro de mediana a los datos LIDAR para reducir el ruido."""
+        data = np.array(data)
+        filtered_data = np.copy(data)
+        
+        for i in range(len(data)):
+            # Determina la ventana alrededor del punto actual
+            start = max(0, i - window_size // 2)
+            end = min(len(data), i + window_size // 2 + 1)
+            filtered_data[i] = np.median(data[start:end])
+        
+        return filtered_data
 
     def detect_person(self, ranges, angle_min, angle_increment):
         points = []
