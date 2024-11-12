@@ -21,7 +21,7 @@ detection_node:
 
 collision_handling_node:
   ros__parameters:
-    enabled: True   # Controla si el collision_handling_node está activo o no
+    enabled: False   # Controla si el collision_handling_node está activo o no
 
 user_interface_node:
   ros__parameters:
