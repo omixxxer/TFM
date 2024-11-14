@@ -22,8 +22,8 @@ class DetectionNode(Node):
         self.declare_parameter('min_leg_radius', 0.01)
         self.declare_parameter('max_leg_radius', 0.05)
         self.declare_parameter('min_leg_distance', 0.1)
-        self.declare_parameter('max_leg_distance', 0.5)
-        self.declare_parameter('median_filter_window', 5)  # Nuevo parámetro para el filtro de mediana
+        self.declare_parameter('max_leg_distance', 0.3)
+        self.declare_parameter('median_filter_window', 7)  # Nuevo parámetro para el filtro de mediana
 
         # Obtener valores de parámetros desde la configuración
         self.enabled = self.get_parameter('enabled').value
