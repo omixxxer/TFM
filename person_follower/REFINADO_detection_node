@@ -13,16 +13,16 @@ class DetectionNode(Node):
         
         # Declaración de parámetros ajustables para el nodo de detección
         self.declare_parameter('enabled', True)
-        self.declare_parameter('max_detection_distance', 2.5)
-        self.declare_parameter('min_detection_distance', 0.01)
-        self.declare_parameter('dbscan_eps', 0.1)
-        self.declare_parameter('dbscan_min_samples', 10)
-        self.declare_parameter('min_leg_cluster_size', 15)
-        self.declare_parameter('max_leg_cluster_size', 45)
+        self.declare_parameter('max_detection_distance', 3.0)
+        self.declare_parameter('min_detection_distance', 0.3)
+        self.declare_parameter('dbscan_eps', 0.08)
+        self.declare_parameter('dbscan_min_samples', 15)
+        self.declare_parameter('min_leg_cluster_size', 40)
+        self.declare_parameter('max_leg_cluster_size', 80)
         self.declare_parameter('min_leg_radius', 0.01)
-        self.declare_parameter('max_leg_radius', 0.15)
+        self.declare_parameter('max_leg_radius', 0.05)
         self.declare_parameter('min_leg_distance', 0.1)
-        self.declare_parameter('max_leg_distance', 0.4)
+        self.declare_parameter('max_leg_distance', 0.5)
         self.declare_parameter('median_filter_window', 5)  # Nuevo parámetro para el filtro de mediana
 
         # Obtener valores de parámetros desde la configuración
@@ -60,8 +60,13 @@ class DetectionNode(Node):
         # Preprocesamiento de datos: aplicar filtro de mediana
         ranges_filtered = self.apply_median_filter(msg.ranges, self.median_filter_window)
 
-        # Detección de persona usando los datos filtrados
-        person_detected = self.detect_person(ranges_filtered, msg.angle_min, msg.angle_increment)
+        # Interpolación de puntos para mejorar la resolución
+        interpolated_ranges, interpolated_angles = self.interpolate_lidar_points(
+            ranges_filtered, msg.angle_min, msg.angle_max, msg.angle_increment, factor=2
+        )
+
+        # Detección de persona usando los datos interpolados
+        person_detected = self.detect_person(interpolated_ranges, interpolated_angles[0], interpolated_angles[1] - interpolated_angles[0])
         self.detection_publisher.publish(Bool(data=person_detected))
         if person_detected:
             self.get_logger().info("¡Persona detectada!")
@@ -78,6 +83,28 @@ class DetectionNode(Node):
             filtered_data[i] = np.median(data[start:end])
         
         return filtered_data
+
+    def interpolate_lidar_points(self, ranges, angle_min, angle_max, angle_increment, factor=2):
+        """Interpolar puntos LIDAR para simular mayor resolución.
+        
+        Args:
+            ranges: Lista de distancias del LIDAR.
+            angle_min: Ángulo mínimo del LIDAR.
+            angle_max: Ángulo máximo del LIDAR.
+            angle_increment: Incremento angular entre puntos LIDAR.
+            factor: Factor de interpolación (factor=2 duplicará el número de puntos).
+        
+        Returns:
+            interpolated_ranges: Lista de distancias interpoladas.
+            interpolated_angles: Lista de ángulos correspondientes a los puntos interpolados.
+        """
+        original_angles = np.arange(angle_min, angle_max, angle_increment)
+        interpolated_angles = np.linspace(angle_min, angle_max, len(ranges) * factor)
+        
+        # Interpolación lineal de los valores de rango
+        interpolated_ranges = np.interp(interpolated_angles, original_angles, ranges)
+        
+        return interpolated_ranges, interpolated_angles
 
     def detect_person(self, ranges, angle_min, angle_increment):
         points = []
@@ -119,37 +146,35 @@ class DetectionNode(Node):
         leg_clusters = []
         for cluster in clusters:
             cluster_size = len(cluster)
-            
-            # Filtrar según el tamaño del cluster
             if self.min_leg_cluster_size < cluster_size < self.max_leg_cluster_size:
-                centroid = np.mean(cluster, axis=0)
-                distances = np.linalg.norm(cluster - centroid, axis=1)
-                mean_radius = np.mean(distances)
-                radius_std_dev = np.std(distances)
-
-                # Verificar si el cluster es aproximadamente circular en 2D
-                if self.min_leg_radius < mean_radius < self.max_leg_radius and radius_std_dev < 0.05 * mean_radius:
-                    width = np.max(cluster[:, 0]) - np.min(cluster[:, 0])
-                    height = np.max(cluster[:, 1]) - np.min(cluster[:, 1])
-                    aspect_ratio = width / height if height != 0 else 0
-
-                    # Filtrar clusters alargados para evitar falsos positivos
-                    if 0.5 < aspect_ratio < 2.0:
-                        leg_clusters.append((cluster, centroid))
-                        self.get_logger().info(f"Cluster de pierna detectado con tamaño: {cluster_size}, radio promedio: {mean_radius:.2f} m, relación ancho-alto: {aspect_ratio:.2f}")
-
-        # Comprobar parejas de clusters de piernas en 2D
+                # Calcular el bounding box
+                x_min, y_min = np.min(cluster, axis=0)
+                x_max, y_max = np.max(cluster, axis=0)
+                width = x_max - x_min
+                height = y_max - y_min
+                
+                # Ratio de forma (para discriminar clusters alargados)
+                aspect_ratio = max(width, height) / min(width, height) if min(width, height) > 0 else 0
+                
+                if aspect_ratio < 5.0: 
+                    distances = np.linalg.norm(cluster - np.mean(cluster, axis=0), axis=1)
+                    mean_radius = np.mean(distances)
+                    if self.min_leg_radius < mean_radius < self.max_leg_radius:
+                        leg_clusters.append(cluster)
+                        self.get_logger().info(f"Cluster de pierna detectado con tamaño: {cluster_size}, radio promedio: {mean_radius:.2f} m y ratio: {aspect_ratio:.2f}")
+                else:
+                    self.get_logger().info(f"Cluster descartado por ratio de forma: {aspect_ratio:.2f}")
+        
+        # Verificar si hay al menos dos clusters en posiciones razonables para representar piernas
         if len(leg_clusters) >= 2:
-            for i, (cluster_a, centroid_a) in enumerate(leg_clusters):
-                for j, (cluster_b, centroid_b) in enumerate(leg_clusters):
+            for i, cluster_a in enumerate(leg_clusters):
+                for j, cluster_b in enumerate(leg_clusters):
                     if i < j:
-                        distance_between_clusters = np.linalg.norm(centroid_a - centroid_b)
-                        
-                        # Verificar si la distancia está dentro del rango esperado para piernas
+                        distance_between_clusters = np.linalg.norm(np.mean(cluster_a, axis=0) - np.mean(cluster_b, axis=0))
+                        self.get_logger().info(f"Distancia entre clusters de pierna: {distance_between_clusters:.2f} m")
                         if self.min_leg_distance < distance_between_clusters < self.max_leg_distance:
                             self.get_logger().info("¡Pareja de clusters de pierna detectada!")
                             return True  # Persona detectada
-
         self.get_logger().info("No se detectaron parejas de clusters de pierna.")
         return False
 
@@ -167,15 +192,24 @@ class DetectionNode(Node):
                 cluster_points = points[labels == label]
                 plt.plot(cluster_points[:, 0], cluster_points[:, 1], 'o', markerfacecolor=color, markeredgecolor='k', markersize=6)
 
+                # Cálculo de tamaño, radio y relación de aspecto del cluster
                 cluster_size = len(cluster_points)
                 distances = np.linalg.norm(cluster_points - np.mean(cluster_points, axis=0), axis=1)
                 mean_radius = np.mean(distances)
-
+                
+                # Bounding box del cluster
+                x_min, y_min = np.min(cluster_points, axis=0)
+                x_max, y_max = np.max(cluster_points, axis=0)
+                width = x_max - x_min
+                height = y_max - y_min
+                aspect_ratio = max(width, height) / min(width, height) if min(width, height) > 0 else 0
+                
+                # Anotación de tamaño, radio y relación de aspecto en el gráfico
                 centroid = np.mean(cluster_points, axis=0)
-                plt.text(centroid[0], centroid[1], f'Size: {cluster_size}\nRadius: {mean_radius:.2f}m',
+                plt.text(centroid[0], centroid[1], f'Size: {cluster_size}\nRadius: {mean_radius:.2f}m\nAspect: {aspect_ratio:.2f}',
                          fontsize=8, ha='center', color=color)
 
-        plt.title('DBSCAN Clustering Result with Size and Radius Annotations')
+        plt.title('DBSCAN Clustering Result with Size, Radius, and Aspect Ratio Annotations')
         plt.xlabel('X')
         plt.ylabel('Y')
         plt.axis('equal')
