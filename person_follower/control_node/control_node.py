@@ -1,8 +1,8 @@
+# Nodo de Control: ControlNode
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Bool
-from geometry_msgs.msg import Twist
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
+from std_srvs.srv import SetBool
 
 class ControlNode(Node):
     def __init__(self):
@@ -28,15 +28,10 @@ class ControlNode(Node):
         # Suscripción a detección de persona
         self.person_detected_sub = self.create_subscription(Bool, '/person_detected', self.person_detected_callback, 10)
         
-        # Publicador de comandos de control
-        self.control_cmd_pub = self.create_publisher(Twist, '/commands/velocity', 10)
+        # Cliente del servicio para habilitar el nodo de seguimiento
+        self.tracking_client = self.create_client(SetBool, 'enable_tracking')
         
-        # Estados y temporizador
         self.person_detected = False
-        self.current_state = "stopped"
-        self.timer_period = 0.1
-        self.timer = self.create_timer(self.timer_period, self.timer_callback)
-
         self.get_logger().info("Nodo de Control iniciado con las funcionalidades disponibles.")
 
     def camera_status_callback(self, msg):
@@ -49,31 +44,18 @@ class ControlNode(Node):
         self.get_logger().info(msg.data)
 
     def person_detected_callback(self, msg):
-        if self.detection_enabled and self.tracking_enabled:
+        if msg.data != self.person_detected:
             self.person_detected = msg.data
-            self.evaluate_system_state()
+            self.toggle_tracking(self.person_detected)
 
-    def evaluate_system_state(self):
-        if self.person_detected and self.tracking_enabled:
-            if self.current_state != "following":
-                self.current_state = "following"
-                self.get_logger().info("Persona detectada, activando seguimiento")
-        else:
-            if self.current_state != "stopped":
-                self.stop_robot()
-                self.current_state = "stopped"
-                self.get_logger().info("No hay detecciones, robot en espera")
+    def toggle_tracking(self, enable):
+        if not self.tracking_client.service_is_ready():
+            self.get_logger().warn("Servicio de seguimiento no está listo.")
+            return
+        request = SetBool.Request()
+        request.data = enable
+        self.tracking_client.call_async(request)
 
-    def timer_callback(self):
-        if self.current_state == "following":
-            self.get_logger().info("Persona detectada, supervisando seguimiento...")
-
-    def stop_robot(self):
-        control_msg = Twist()
-        control_msg.linear.x = 0.0
-        control_msg.angular.z = 0.0
-        self.control_cmd_pub.publish(control_msg)
-        self.get_logger().info("Robot detenido.")
 
 def main(args=None):
     rclpy.init(args=args)
@@ -84,4 +66,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
