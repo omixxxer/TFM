@@ -1,34 +1,38 @@
+# Nodo de Seguimiento: TrackingNode
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
-from std_msgs.msg import Bool
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
+from std_srvs.srv import SetBool
 import math
 
 class TrackingNode(Node):
     def __init__(self):
         super().__init__('tracking_node')
         
-        self.declare_parameter('enabled', True)
-        self.enabled = self.get_parameter('enabled').value
-        if not self.enabled:
-            self.get_logger().info("Nodo de Seguimiento desactivado.")
-            self.publish_status("Nodo de Seguimiento desactivado.")
-            return
+        # Estado del nodo de seguimiento
+        self.tracking_enabled = False
         
+        # Servicio para habilitar o deshabilitar el seguimiento
+        self.create_service(SetBool, 'enable_tracking', self.enable_tracking_callback)
+
         # Publicadores y suscripciones
         self.status_publisher = self.create_publisher(String, '/tracking/status', 10)
         self.cmd_vel_publisher = self.create_publisher(Twist, '/commands/velocity', 10)
         self.person_detected_subscription = self.create_subscription(Bool, '/person_detected', self.detection_callback, 10)
         self.scan_subscription = self.create_subscription(LaserScan, '/scan', self.listener_callback, 10)
         
-        # Parámetros de distancia y estado
-        self.min_distance = 0.4  # Distancia mínima para detenerse si hay un obstáculo
-        self.intermediate_distance = 1.0  # Distancia intermedia para ajustar la velocidad
         self.person_detected = False
         self.get_logger().info("Nodo de Seguimiento iniciado")
         self.publish_status("Nodo de Seguimiento iniciado.")
+
+    def enable_tracking_callback(self, request, response):
+        self.tracking_enabled = request.data
+        response.success = True
+        response.message = f"Tracking {'enabled' if self.tracking_enabled else 'disabled'}"
+        self.get_logger().info(response.message)
+        return response
 
     def detection_callback(self, msg):
         self.person_detected = msg.data
@@ -37,18 +41,16 @@ class TrackingNode(Node):
         self.status_publisher.publish(String(data=message))
 
     def listener_callback(self, input_msg):
-        """Callback de LIDAR para calcular el ángulo hacia la persona detectada y ajustar velocidades"""
+        if not self.tracking_enabled or not self.person_detected:
+            return
 
         # Verificar si hay obstáculos en la distancia mínima
         closest_distance = min(input_msg.ranges)
-        if closest_distance < self.min_distance:
+        if closest_distance < 0.4:
             # Detener el robot si el obstáculo está demasiado cerca
             self.stop_robot()
             self.get_logger().warn("Obstáculo detectado muy cerca. Robot detenido.")
             return  # No continuar con el seguimiento si hay un obstáculo
-
-        if not self.person_detected:
-            return  # No seguir si no hay persona detectada
 
         # Calcular la dirección de la persona y ajustar la velocidad
         angle_min, angle_increment, ranges = input_msg.angle_min, input_msg.angle_increment, input_msg.ranges
@@ -57,9 +59,9 @@ class TrackingNode(Node):
         distance_to_person = min(ranges)
 
         # Ajustar velocidad lineal según la distancia
-        if distance_to_person < self.min_distance:
+        if distance_to_person < 0.4:
             vx = 0.0  # Detener si está demasiado cerca de la persona
-        elif distance_to_person < self.intermediate_distance:
+        elif distance_to_person < 1.0:
             vx = 0.25  # Reducir velocidad
         else:
             vx = 0.45  # Velocidad normal
@@ -85,14 +87,13 @@ class TrackingNode(Node):
         self.cmd_vel_publisher.publish(control_msg)
         self.get_logger().info("Robot detenido.")
 
+
 def main(args=None):
     rclpy.init(args=args)
     node = TrackingNode()
-    if node.enabled:
-        rclpy.spin(node)
+    rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
-
