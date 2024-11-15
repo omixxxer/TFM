@@ -10,6 +10,12 @@ def generate_launch_description():
         'config.yaml'
     )
 
+    rviz_config_path = os.path.join(
+        get_package_share_directory('person_follower'),
+        'config',
+        'tb2.rviz'  # Archivo de configuración de RViz 2
+    )
+
     return LaunchDescription([
         Node(
             package='person_follower',
@@ -43,17 +49,17 @@ def generate_launch_description():
         ),
         Node(
             package='person_follower',
-            executable='collision_handling_node',
-            name='collision_handling_node',
-            output='screen',
-            parameters=[config_path]
-        ),
-        Node(
-            package='person_follower',
             executable='user_interface_node',
             name='user_interface_node',
             output='screen',
             parameters=[config_path]
+        ),
+        Node(
+            package='rviz2',
+            executable='rviz2',
+            name='rviz2',
+            arguments=['-d', rviz_config_path],
+            output='screen',
+            additional_env={'ROS_DOMAIN_ID': '24'}
         )
     ])
-
