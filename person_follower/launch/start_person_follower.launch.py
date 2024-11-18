@@ -53,13 +53,5 @@ def generate_launch_description():
             name='user_interface_node',
             output='screen',
             parameters=[config_path]
-        ),
-        Node(
-            package='rviz2',
-            executable='rviz2',
-            name='rviz2',
-            arguments=['-d', rviz_config_path],
-            output='screen',
-            additional_env={'ROS_DOMAIN_ID': '24'}
         )
     ])

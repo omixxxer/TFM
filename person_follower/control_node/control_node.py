@@ -3,6 +3,7 @@ from rclpy.node import Node
 from std_msgs.msg import Bool, String
 from std_srvs.srv import SetBool
 
+
 class ControlNode(Node):
     def __init__(self):
         super().__init__('control_node')
@@ -22,12 +23,18 @@ class ControlNode(Node):
         # Estado del sistema
         self.person_detected = False
         self.tracking_service_ready = False
+        self.shutdown_confirmations = 0
+        self.total_nodes = 4  # Ajustar según el número total de nodos secundarios
 
         # Subscripciones
         self.create_subscription(String, '/camera/status', self.camera_status_callback, 10)
         self.create_subscription(String, '/detection/status', self.detection_status_callback, 10)
         self.create_subscription(String, '/tracking/status', self.tracking_status_callback, 10)
         self.create_subscription(Bool, '/person_detected', self.person_detected_callback, 10)
+        self.create_subscription(Bool, '/shutdown_confirmation', self.shutdown_confirmation_callback, 10)
+
+        # Publicador de cierre de nodos secundarios
+        self.shutdown_publisher = self.create_publisher(Bool, '/system_shutdown', 10)
 
         # Cliente para activar/desactivar el seguimiento
         self.tracking_client = self.create_client(SetBool, 'enable_tracking')
@@ -51,6 +58,28 @@ class ControlNode(Node):
 
     def tracking_status_callback(self, msg):
         self.get_logger().info(f"Estado del nodo de seguimiento: {msg.data}")
+
+    def shutdown_confirmation_callback(self, msg):
+        if msg.data:
+            self.shutdown_confirmations += 1
+            self.get_logger().info(f"Confirmación de cierre recibida ({self.shutdown_confirmations}/{self.total_nodes}).")
+
+    def notify_shutdown(self):
+        """Notificar a los nodos secundarios para que se cierren."""
+        self.shutdown_publisher.publish(Bool(data=True))
+        self.get_logger().info("Notificación de cierre enviada a los nodos secundarios.")
+        rclpy.spin_once(self, timeout_sec=0.2)  # Breve delay para enviar el mensaje
+        
+        timeout = 10  # Tiempo máximo de espera en segundos
+        start_time = self.get_clock().now().seconds_nanoseconds()[0]
+        while self.shutdown_confirmations < self.total_nodes:
+            elapsed_time = self.get_clock().now().seconds_nanoseconds()[0] - start_time
+            if elapsed_time > timeout:
+                self.get_logger().warn("No se recibieron todas las confirmaciones. Procediendo con el cierre.")
+                break
+            self.get_logger().info("Esperando confirmaciones de cierre...")
+            rclpy.spin_once(self, timeout_sec=0.5)
+        self.get_logger().info("Cierre centralizado completado.")
 
     def person_detected_callback(self, msg):
         try:
@@ -83,6 +112,7 @@ class ControlNode(Node):
         except Exception as e:
             self.get_logger().error(f"Error en la respuesta del servicio de seguimiento: {e}")
 
+
 def main(args=None):
     rclpy.init(args=args)
     node = ControlNode()
@@ -91,8 +121,10 @@ def main(args=None):
     except KeyboardInterrupt:
         node.get_logger().info("Nodo de Control detenido manualmente.")
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        node.notify_shutdown()  # Notificar a los nodos secundarios
+        node.destroy_node()     # Destruir el nodo de control
+        rclpy.shutdown()        # Cerrar el sistema
+
 
 if __name__ == '__main__':
     main()

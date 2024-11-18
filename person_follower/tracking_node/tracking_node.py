@@ -22,6 +22,7 @@ class TrackingNode(Node):
         self.cmd_vel_publisher = self.create_publisher(Twist, '/commands/velocity', 10)
         self.person_detected_subscription = self.create_subscription(Bool, '/person_detected', self.detection_callback, 10)
         self.scan_subscription = self.create_subscription(LaserScan, '/scan', self.listener_callback, 10)
+        self.shutdown_subscription = self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
         
         self.person_detected = False
         self.get_logger().info("Nodo de Seguimiento iniciado")
@@ -36,6 +37,19 @@ class TrackingNode(Node):
 
     def detection_callback(self, msg):
         self.person_detected = msg.data
+    
+    def initialize_shutdown_listener(self):
+        """Inicializa el suscriptor para manejar el cierre del sistema."""
+        self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
+        self.shutdown_confirmation_publisher = self.create_publisher(Bool, '/shutdown_confirmation', 10)
+
+    
+    def shutdown_callback(self, msg):
+        """Callback para manejar la notificación de cierre del sistema."""
+        if msg.data:
+            self.get_logger().info("Cierre del sistema detectado. Enviando confirmación.")
+            self.shutdown_confirmation_publisher.publish(Bool(data=True))
+            self.destroy_node()
 
     def publish_status(self, message):
         self.status_publisher.publish(String(data=message))
@@ -90,10 +104,14 @@ class TrackingNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = TrackingNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    node = TrackingNode()  
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("Nodo de Seguimiento detenido manualmente.")
+    finally:
+        node.destroy_node()
 
 if __name__ == '__main__':
     main()
+

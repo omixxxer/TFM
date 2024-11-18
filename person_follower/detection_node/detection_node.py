@@ -48,11 +48,15 @@ class DetectionNode(Node):
         self.status_publisher = self.create_publisher(String, '/detection/status', 10)
         self.detection_publisher = self.create_publisher(Bool, '/person_detected', 10)
         self.scan_subscription = self.create_subscription(LaserScan, '/scan', self.lidar_callback, 10)
+        
         self.get_logger().info("Nodo de Detección iniciado")
         self.publish_status("Nodo de Detección iniciado.")
         
+        # Inicializar lógica de cierre
+        self.initialize_shutdown_listener()
+        
         self.enable_visualization = enable_visualization
-
+    
     def publish_status(self, message):
         self.status_publisher.publish(String(data=message))
 
@@ -70,7 +74,20 @@ class DetectionNode(Node):
         self.detection_publisher.publish(Bool(data=person_detected))
         if person_detected:
             self.get_logger().info("¡Persona detectada!")
+    
+    def initialize_shutdown_listener(self):
+        """Inicializa el suscriptor para manejar el cierre del sistema."""
+        self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
+        self.shutdown_confirmation_publisher = self.create_publisher(Bool, '/shutdown_confirmation', 10)
 
+    
+    def shutdown_callback(self, msg):
+        """Callback para manejar la notificación de cierre del sistema."""
+        if msg.data:
+            self.get_logger().info("Cierre del sistema detectado. Enviando confirmación.")
+            self.shutdown_confirmation_publisher.publish(Bool(data=True))
+            self.destroy_node()
+            
     def apply_median_filter(self, data, window_size):
         """Aplica un filtro de mediana a los datos LIDAR para reducir el ruido."""
         data = np.array(data)
@@ -216,14 +233,15 @@ class DetectionNode(Node):
         plt.grid()
         plt.show()
 
-
 def main(args=None):
     rclpy.init(args=args)
-    node = DetectionNode(enable_visualization=False)
-    if node.enabled:
+    node = DetectionNode(enable_visualization=True)
+    try:
         rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    except KeyboardInterrupt:
+        node.get_logger().info("Nodo de Detección detenido manualmente.")
+    finally:
+        node.destroy_node()
 
 if __name__ == '__main__':
     main()
