@@ -48,9 +48,12 @@ class CameraNode(Node):
         """Callback para manejar la notificación de cierre del sistema."""
         if msg.data:
             self.get_logger().info("Cierre del sistema detectado. Enviando confirmación.")
-            self.shutdown_confirmation_publisher.publish(Bool(data=True))
-            self.cap.release()  # Liberar la cámara
-            self.destroy_node()
+            try:
+                self.shutdown_confirmation_publisher.publish(Bool(data=True))
+            except Exception as e:
+                self.get_logger().error(f"Error al publicar confirmación de apagado: {e}")
+            finally:
+                self.destroy_node()
 
 
 def main(args=None):

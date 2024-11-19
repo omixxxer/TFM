@@ -106,7 +106,7 @@ class ControlNode(Node):
         try:
             response = future.result()
             if response.success:
-                self.get_logger().info(f"Seguimiento {'habilitado' if response.message == 'enabled' else 'deshabilitado'}: {response.message}")
+                self.get_logger().info(f"Seguimiento {'habilitado' if response.data else 'deshabilitado'}: {response.message}")
             else:
                 self.get_logger().warn(f"No se pudo cambiar el estado del seguimiento: {response.message}")
         except Exception as e:
@@ -128,3 +128,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
