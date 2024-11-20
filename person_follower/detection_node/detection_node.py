@@ -64,7 +64,7 @@ class DetectionNode(Node):
         self.get_logger().info(f"{message} | {data}")
 
     def lidar_callback(self, msg):
-        self.log_info("Procesando datos LIDAR", {"ranges": len(msg.ranges)})
+        #self.log_info("Procesando datos LIDAR", {"ranges": len(msg.ranges)})
         
         # Preprocesamiento de datos: aplicar filtro de mediana
         ranges_filtered = self.apply_median_filter(msg.ranges, self.median_filter_window)
@@ -137,20 +137,33 @@ class DetectionNode(Node):
 
         self.log_info("Clusters detectados", {"num_clusters": num_clusters})
         
-	# Agrupa los puntos según las etiquetas de DBSCAN
+	    # Agrupa los puntos según las etiquetas de DBSCAN
         clusters = [points[labels == label] for label in set(labels) if label != -1]
         
-        # Detecta los clusters de piernas
-        detected = self.detect_leg_clusters(clusters)
+        # Detectar los clusters de piernas y obtener todos los clusters
+        all_clusters, leg_clusters = self.detect_leg_clusters(clusters)
         
         # Publicar clusters
         self.publish_clusters(points, labels)
-
-        return detected
+        
+	    # Si hay clusters de piernas, también los publicamos
+        if leg_clusters:
+	    # Publicar solo los clusters de piernas
+            leg_points = np.concatenate(leg_clusters)  # Unir todos los puntos de los clusters de piernas
+            leg_labels = [1] * len(leg_points)  # Etiquetar los puntos de piernas con una etiqueta distinta, por ejemplo, 1
+            self.publish_clusters(leg_points, leg_labels)  # Publicar los clusters de piernas
+        
+        return bool(leg_clusters)  # Devolver si se detectaron piernas
 
     def detect_leg_clusters(self, clusters):
+        """Detecta los clusters de piernas y devuelve ambos: los clusters generales y los de piernas."""
         leg_clusters = []
+        all_clusters = []  # Para guardar todos los clusters procesados
+               
         for cluster in clusters:
+            all_clusters.append(cluster)  # Añadir el cluster a la lista de todos los clusters
+            
+            
             cluster_size = len(cluster)
             if self.min_leg_cluster_size < cluster_size < self.max_leg_cluster_size:
                 x_min, y_min = np.min(cluster, axis=0)
@@ -167,11 +180,14 @@ class DetectionNode(Node):
                             "Cluster de pierna detectado",
                             {"cluster_size": cluster_size, "radius": mean_radius, "aspect_ratio": aspect_ratio},
                         )
+                        
+   	# Log de cuántos clusters de piernas se han detectado                        
         if len(leg_clusters) >= 2:
             self.log_info("Piernas detectadas", {"legs_detected": len(leg_clusters)})
-            return leg_clusters and True
-        self.log_info("Piernas no detectadas", {"legs_detected": len(leg_clusters)})
-        return False and []
+        else:
+            self.log_info("Piernas no detectadas", {"legs_detected": len(leg_clusters)})
+            
+        return all_clusters, leg_clusters 
         
 
     def publish_clusters(self, points, labels):

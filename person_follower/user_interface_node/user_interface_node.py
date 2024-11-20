@@ -4,7 +4,6 @@ from std_msgs.msg import Bool, String, Float32MultiArray
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 class UserInterfaceNode(Node):
     def __init__(self):
         super().__init__('user_interface_node')
@@ -96,16 +95,40 @@ class UserInterfaceNode(Node):
         # Reorganizar los datos en pares (x, y)
         points = data.reshape(-1, 2)
 
-        # Actualizar los puntos en la visualización
+        # Suponiendo que los clusters se reciben como etiquetas
+        labels = self.get_cluster_labels(points)  # O ajusta según tu método de generación de etiquetas
+
+        # Limpiar completamente la gráfica antes de dibujar nuevos datos
         self.ax.clear()
-        self.ax.scatter(points[:, 0], points[:, 1], s=20, c='blue', label='Clusters')
-        self.ax.set_title('Visualización de Clusters')
-        self.ax.set_xlabel('X (m)')
-        self.ax.set_ylabel('Y (m)')
-        self.ax.axis('equal')
-        self.ax.grid(True)
-        self.ax.legend()
-        plt.pause(0.01)  # Pausa breve para actualizar la ventana
+
+        # Graficar los puntos de los clusters, diferenciados por colores
+        unique_labels = np.unique(labels)
+        for label in unique_labels:
+            if label == -1:  # Ignorar los puntos de ruido (DBSCAN marca como -1)
+                continue
+
+            cluster_points = points[labels == label]  # Filtrar puntos por etiqueta
+            self.ax.scatter(cluster_points[:, 0], cluster_points[:, 1], label=f'Cluster {label}')
+
+        # Etiquetas y configuración de la gráfica
+        self.ax.set_xlabel("X")
+        self.ax.set_ylabel("Y")
+        self.ax.set_title("Visualización de Clusters")
+        self.ax.legend(loc='upper right')
+
+        # Actualizar la visualización
+        plt.draw()
+        plt.pause(0.001)
+
+    def get_cluster_labels(self, points):
+        """Simulación de un método para obtener las etiquetas de los clusters.
+        En el código real, deberías utilizar algo como DBSCAN u otro algoritmo de agrupamiento."""
+        # Este es un ejemplo, debes reemplazarlo con tu lógica de agrupación real.
+        from sklearn.cluster import DBSCAN
+
+        clustering = DBSCAN(eps=0.5, min_samples=5).fit(points)
+        return clustering.labels_
+
 
 
 def main(args=None):
