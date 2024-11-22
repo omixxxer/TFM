@@ -109,7 +109,7 @@ class UserInterfaceNode(Node):
             filtered_points = []
             for point in general_points:
                 distances = np.linalg.norm(leg_points - point, axis=1)
-                if np.all(distances > 0.02):  # Umbral de 0.2 para considerar solapamiento
+                if np.all(distances > 0.001):  # Umbral de 0.2 para considerar solapamiento
                     filtered_points.append(point)
 
             # Convertir a array para graficar

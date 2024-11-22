@@ -137,7 +137,7 @@ class DetectionNode(Node):
         labels = clustering.labels_
         num_clusters = len(set(labels)) - (1 if -1 in labels else 0)
     
-        self.log_info("Clusters detectados", {"num_clusters": num_clusters})
+        #self.log_info("Clusters detectados", {"num_clusters": num_clusters})
         
         # Agrupa los puntos según las etiquetas de DBSCAN
         clusters = [points[labels == label] for label in set(labels) if label != -1]
@@ -201,7 +201,7 @@ class DetectionNode(Node):
                 cluster_msg.data.extend([point[0], point[1]])  # x, y de cada punto
     
         self.general_cluster_publisher.publish(cluster_msg)
-        self.get_logger().info(f"Clusters generales publicados: {len(set(labels)) - (1 if -1 in labels else 0)}")
+        self.get_logger().debug(f"Clusters generales publicados: {len(set(labels)) - (1 if -1 in labels else 0)}")
     
     def publish_leg_clusters(self, points, labels):
         """Publica los clusters de piernas detectados como Float32MultiArray."""
@@ -211,7 +211,7 @@ class DetectionNode(Node):
             cluster_msg.data.extend([point[0], point[1]])  # x, y de cada punto
     
         self.leg_cluster_publisher.publish(cluster_msg)
-        self.get_logger().info(f"Clusters de piernas publicados: {len(points)} puntos")
+        self.get_logger().debug(f"Clusters de piernas publicados: {len(points)} puntos")
 
 
 
