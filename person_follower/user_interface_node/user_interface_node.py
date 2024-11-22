@@ -20,7 +20,8 @@ class UserInterfaceNode(Node):
         self.create_subscription(String, '/detection/status', self.detection_status_callback, 10)
         self.create_subscription(String, '/tracking/status', self.tracking_status_callback, 10)
         self.create_subscription(Bool, '/person_detected', self.person_detected_callback, 10)
-        self.create_subscription(Float32MultiArray, '/detection/clusters', self.visualize_clusters_callback, 10)
+        self.create_subscription(Float32MultiArray, '/clusters/general', self.visualize_general_clusters_callback, 10)
+        self.create_subscription(Float32MultiArray, '/clusters/legs', self.visualize_leg_clusters_callback, 10)
 
         # Publicador para confirmar el apagado
         self.shutdown_confirmation_publisher = self.create_publisher(Bool, '/shutdown_confirmation', 10)
@@ -35,10 +36,15 @@ class UserInterfaceNode(Node):
         # Estado previo para evitar logs repetitivos
         self.previous_status = {}
 
+        # Inicialización de objetos scatter
+        self.general_clusters_scatter = None
+        self.leg_clusters_scatter = None
+
+
         # Configuración de Matplotlib para visualización en tiempo real
         plt.ion()
         self.fig, self.ax = plt.subplots(figsize=(8, 6))
-        self.scatter = None
+
 
         # Timer para mostrar el estado en la terminal cada 5 segundos
         self.timer = self.create_timer(5.0, self.display_status)
@@ -85,51 +91,77 @@ class UserInterfaceNode(Node):
             print("==========================")
             self.previous_status = current_status
 
-    def visualize_clusters_callback(self, msg):
-        """Visualiza los clusters publicados como Float32MultiArray."""
+    def visualize_general_clusters_callback(self, msg):
+        """Visualiza los clusters generales excluyendo los clusters de piernas."""
         data = np.array(msg.data)
         if data.size == 0:
-            self.get_logger().info("No hay clusters para visualizar.")
+            self.get_logger().info("No hay clusters generales para visualizar.")
+            return
+
+        # Reorganizar los datos en pares (x, y)
+        general_points = data.reshape(-1, 2)
+
+        # Si hay clusters de piernas, filtrar los puntos solapados
+        if self.leg_clusters_scatter is not None:
+            leg_points = self.leg_clusters_scatter.get_offsets()
+
+            # Calcular distancias y filtrar puntos
+            filtered_points = []
+            for point in general_points:
+                distances = np.linalg.norm(leg_points - point, axis=1)
+                if np.all(distances > 0.02):  # Umbral de 0.2 para considerar solapamiento
+                    filtered_points.append(point)
+
+            # Convertir a array para graficar
+            general_points = np.array(filtered_points)
+
+        # Actualizar los puntos generales
+        if self.general_clusters_scatter is None:
+            self.general_clusters_scatter = self.ax.scatter(
+                general_points[:, 0], general_points[:, 1],
+                c='blue', s=20, alpha=0.7, marker='o', label='Clusters Generales'
+            )  # s: tamaño de los puntos
+        else:
+            self.general_clusters_scatter.set_offsets(general_points)
+
+        # Actualizar la visualización
+        self.update_plot()
+
+    def visualize_leg_clusters_callback(self, msg):
+        """Visualiza los clusters de piernas publicados como Float32MultiArray."""
+        data = np.array(msg.data)
+        if data.size == 0:
+            self.get_logger().info("No hay clusters de piernas para visualizar.")
             return
 
         # Reorganizar los datos en pares (x, y)
         points = data.reshape(-1, 2)
 
-        # Suponiendo que los clusters se reciben como etiquetas
-        labels = self.get_cluster_labels(points)  # O ajusta según tu método de generación de etiquetas
-
-        # Limpiar completamente la gráfica antes de dibujar nuevos datos
-        self.ax.clear()
-
-        # Graficar los puntos de los clusters, diferenciados por colores
-        unique_labels = np.unique(labels)
-        for label in unique_labels:
-            if label == -1:  # Ignorar los puntos de ruido (DBSCAN marca como -1)
-                continue
-
-            cluster_points = points[labels == label]  # Filtrar puntos por etiqueta
-            self.ax.scatter(cluster_points[:, 0], cluster_points[:, 1], label=f'Cluster {label}')
-
-        # Etiquetas y configuración de la gráfica
-        self.ax.set_xlabel("X")
-        self.ax.set_ylabel("Y")
-        self.ax.set_title("Visualización de Clusters")
-        self.ax.legend(loc='upper right')
+        # Actualizar los puntos de piernas
+        if self.leg_clusters_scatter is None:
+            self.leg_clusters_scatter = self.ax.scatter(
+                points[:, 0], points[:, 1],
+                c='red', s=20, alpha=0.9, marker='d', label='Clusters de Piernas'
+            )  # s: tamaño de los puntos
+        else:
+            self.leg_clusters_scatter.set_offsets(points)
 
         # Actualizar la visualización
+        self.update_plot()
+
+    def update_plot(self):
+        """Actualiza la visualización en tiempo real."""
+        self.ax.set_xlabel("Coordenada X", fontsize=12)
+        self.ax.set_ylabel("Coordenada Y", fontsize=12)
+        self.ax.set_title("Visualización de Clusters", fontsize=16)
+        self.ax.legend(loc='upper right', fontsize=10)
+        
+        # Activar la cuadrícula
+        self.ax.grid(True, linestyle='--', alpha=0.7)
+
+        # Redibujar el gráfico
         plt.draw()
         plt.pause(0.001)
-
-    def get_cluster_labels(self, points):
-        """Simulación de un método para obtener las etiquetas de los clusters.
-        En el código real, deberías utilizar algo como DBSCAN u otro algoritmo de agrupamiento."""
-        # Este es un ejemplo, debes reemplazarlo con tu lógica de agrupación real.
-        from sklearn.cluster import DBSCAN
-
-        clustering = DBSCAN(eps=0.5, min_samples=5).fit(points)
-        return clustering.labels_
-
-
 
 def main(args=None):
     rclpy.init(args=args)
@@ -144,4 +176,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
