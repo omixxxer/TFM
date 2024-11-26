@@ -5,6 +5,7 @@ from std_msgs.msg import Bool, Float32MultiArray
 import numpy as np
 from sklearn.cluster import DBSCAN
 from std_msgs.msg import String
+from geometry_msgs.msg import Point
 
 class DetectionNode(Node):
     def __init__(self):
@@ -13,15 +14,15 @@ class DetectionNode(Node):
         # Declaración de parámetros ajustables para el nodo de detección
         self.declare_parameter('enabled', True)
         self.declare_parameter('max_detection_distance', 5.0)
-        self.declare_parameter('min_detection_distance', 0.3)
+        self.declare_parameter('min_detection_distance', 0.1)
         self.declare_parameter('dbscan_eps', 0.08)
         self.declare_parameter('dbscan_min_samples', 15)
         self.declare_parameter('min_leg_cluster_size', 40)
         self.declare_parameter('max_leg_cluster_size', 80)
         self.declare_parameter('min_leg_radius', 0.01)
         self.declare_parameter('max_leg_radius', 0.05)
-        self.declare_parameter('min_leg_distance', 0.01)
-        self.declare_parameter('max_leg_distance', 0.5)
+        self.declare_parameter('min_leg_distance', 0.02)
+        self.declare_parameter('max_leg_distance', 0.2)
         self.declare_parameter('median_filter_window', 7)  # Nuevo parámetro para el filtro de mediana
 
         # Obtener valores de parámetros desde la configuración
@@ -50,6 +51,7 @@ class DetectionNode(Node):
         self.cluster_publisher = self.create_publisher(Float32MultiArray, '/detection/clusters', 10)
         self.general_cluster_publisher = self.create_publisher(Float32MultiArray, '/clusters/general', 10)
         self.leg_cluster_publisher = self.create_publisher(Float32MultiArray, '/clusters/legs', 10)
+        self.person_position_publisher = self.create_publisher(Point, '/person_position', 10)
 
         self.log_info("Nodo iniciado", {"status": "enabled"})
         self.publish_status("Nodo de Detección iniciado.")
@@ -183,6 +185,10 @@ class DetectionNode(Node):
                         
         # Log de cuántos clusters de piernas se han detectado                        
         if len(leg_clusters) >= 2:
+            position = np.mean(np.concatenate(leg_clusters), axis=0)  # Promedio de las piernas
+            person_position = Point(x=position[0], y=position[1], z=0.0)
+            self.person_position_publisher.publish(person_position)
+            self.log_info("Posición de la persona publicada", {"x": position[0], "y": position[1]})
             self.log_info("Piernas detectadas", {"legs_detected": len(leg_clusters)})
         else:
             self.log_info("Piernas no detectadas", {"legs_detected": len(leg_clusters)})

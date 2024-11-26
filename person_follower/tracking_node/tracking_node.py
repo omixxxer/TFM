@@ -4,6 +4,7 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool, String
 from std_srvs.srv import SetBool
+from geometry_msgs.msg import Point
 import math
 
 class TrackingNode(Node):
@@ -18,6 +19,8 @@ class TrackingNode(Node):
         self.create_service(SetBool, 'enable_tracking', self.enable_tracking_callback)
 
         # Publicadores y suscripciones
+        self.person_position_subscription = self.create_subscription(Point, '/person_position', self.person_position_callback, 10)
+
         self.status_publisher = self.create_publisher(String, '/tracking/status', 10)
         self.cmd_vel_publisher = self.create_publisher(Twist, '/commands/velocity', 10)
         self.person_detected_subscription = self.create_subscription(Bool, '/person_detected', self.detection_callback, 10)
@@ -25,6 +28,7 @@ class TrackingNode(Node):
         self.shutdown_subscription = self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
         
         self.person_detected = False
+        self.person_position = None  # Posición actual de la persona
         self.get_logger().info("Nodo de Seguimiento iniciado")
         self.publish_status("Nodo de Seguimiento iniciado.")
 
@@ -37,6 +41,10 @@ class TrackingNode(Node):
 
     def detection_callback(self, msg):
         self.person_detected = msg.data
+
+    def person_position_callback(self, msg):
+        self.person_position = msg
+        self.get_logger().info(f"Posición recibida: x={msg.x:.2f}, y={msg.y:.2f}")
 
 	
     def shutdown_callback(self, msg):
@@ -54,34 +62,39 @@ class TrackingNode(Node):
         self.status_publisher.publish(String(data=message))
 
     def listener_callback(self, input_msg):
-        if not self.tracking_enabled or not self.person_detected:
+        if not self.tracking_enabled or not self.person_detected or not self.person_position:
             return
 
         # Verificar si hay obstáculos en la distancia mínima
-        closest_distance = min(input_msg.ranges)
-        is_obstacle_detected = closest_distance < 0.4
+        #closest_distance = min(input_msg.ranges)
+        #is_obstacle_detected = closest_distance < 0.4
 
         # Solo registrar un mensaje si el estado del obstáculo cambia
-        if self.last_obstacle_state != is_obstacle_detected:
-            if is_obstacle_detected:
-                self.stop_robot()
-                self.get_logger().warn("Obstáculo detectado muy cerca. Robot detenido.")
-            else:
-                self.get_logger().info("Obstáculo eliminado. Reanudando movimiento.")
-            self.last_obstacle_state = is_obstacle_detected
+        #if self.last_obstacle_state != is_obstacle_detected:
+        #    if is_obstacle_detected:
+        #        self.stop_robot()
+        #        self.get_logger().warn("Obstáculo detectado muy cerca. Robot detenido.")
+        #    else:
+        #        self.get_logger().info("Obstáculo eliminado. Reanudando movimiento.")
+        #    self.last_obstacle_state = is_obstacle_detected
 
         # Si hay un obstáculo, no continuar con el seguimiento
-        if is_obstacle_detected:
-            return
+        #if is_obstacle_detected:
+        #    return
 
         # Calcular la dirección de la persona y ajustar la velocidad
-        angle_min, angle_increment, ranges = input_msg.angle_min, input_msg.angle_increment, input_msg.ranges
-        min_range_index = ranges.index(min(ranges))
-        angle_to_person = angle_min + min_range_index * angle_increment
-        distance_to_person = min(ranges)
+        #angle_min, angle_increment, ranges = input_msg.angle_min, input_msg.angle_increment, input_msg.ranges
+        #min_range_index = ranges.index(min(ranges))
+        #angle_to_person = angle_min + min_range_index * angle_increment
+        #distance_to_person = min(ranges)
+
+        # Usa la posición de la persona para calcular la dirección y la distancia
+        distance_to_person = math.sqrt(self.person_position.x**2 + self.person_position.y**2)
+        angle_to_person = math.atan2(self.person_position.y, self.person_position.x)
+
 
         # Ajustar velocidad lineal según la distancia
-        if distance_to_person < 0.4:
+        if distance_to_person < 0.1:
             vx = 0.0  # Detener si está demasiado cerca de la persona
         elif distance_to_person < 1.0:
             vx = 0.25  # Reducir velocidad
