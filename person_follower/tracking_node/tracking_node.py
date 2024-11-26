@@ -18,7 +18,10 @@ class TrackingNode(Node):
 
         # Servicio para habilitar o deshabilitar el seguimiento
         self.create_service(SetBool, 'enable_tracking', self.enable_tracking_callback)
+        self.declare_parameter('obstacle_avoidance_enabled', True)
 
+        self.obstacle_avoidance_enabled = self.get_parameter('obstacle_avoidance_enabled').value
+        
         # Publicadores y suscripciones
         self.person_position_subscription = self.create_subscription(Point, '/person_position', self.person_position_callback, 10)
 
@@ -32,7 +35,7 @@ class TrackingNode(Node):
         self.person_position = None  # Posición actual de la persona
         self.last_person_update_time = None  # Última vez que se actualizó la posición de la persona
         self.timeout_duration = 2.0  # Segundos antes de detener el robot si no hay actualizaciones
-
+        self.previous_vx = 0.0
 
         self.get_logger().info("Nodo de Seguimiento iniciado")
         self.publish_status("Nodo de Seguimiento iniciado.")
@@ -54,6 +57,9 @@ class TrackingNode(Node):
 
 
     def avoid_obstacles(self, input_msg):
+        if not self.obstacle_avoidance_enabled:
+            return 0.0  # No ajustar si la evasión está deshabilitada
+
         closest_distance = min(input_msg.ranges)
         obstacle_angle_index = input_msg.ranges.index(closest_distance)
         angle_to_obstacle = input_msg.angle_min + obstacle_angle_index * input_msg.angle_increment
@@ -63,7 +69,6 @@ class TrackingNode(Node):
             # Cambiar la dirección del robot ligeramente para evitar el obstáculo
             return -0.3 * angle_to_obstacle  # Devuelve un ajuste angular para esquivar
         return 0.0  # No se requiere ajuste si no hay obstáculo
-
 
     def shutdown_callback(self, msg):
         """Callback para manejar la notificación de cierre del sistema."""
@@ -81,6 +86,7 @@ class TrackingNode(Node):
 
     def listener_callback(self, input_msg):
         if not self.tracking_enabled or not self.person_detected or not self.person_position:
+            self.stop_robot()
             return
 
         # Verificar si la posición de la persona ha expirado
@@ -96,21 +102,44 @@ class TrackingNode(Node):
         # Esquivar obstáculos
         adjustment = self.avoid_obstacles(input_msg)
 
-        # Velocidad lineal proporcional
-        vx = min(0.45, max(0.0, 0.45 * (distance_to_person - 0.1))) if distance_to_person > 0.1 else 0.0
+        # Velocidad lineal
+        max_speed = 0.45
+        acceleration_limit = 0.01  # Incremento máximo por iteración
+        smoothing_factor = 0.8  # Para suavizar la velocidad
 
+        target_vx = min(max_speed, max(0.0, max_speed * (distance_to_person - 0.1) / 0.9)) if distance_to_person > 0.1 else 0.0
+        filtered_vx = self.previous_vx * smoothing_factor + target_vx * (1 - smoothing_factor)
+        vx = self.previous_vx + min(acceleration_limit, max(-acceleration_limit, filtered_vx - self.previous_vx))
+        self.previous_vx = vx
+
+        
+
+        # Velocidad angular
         angle_difference = -angle_to_person
         max_angular_velocity = 1.6
-        wz = 2.0 * angle_difference
+        wz = 2.0 * angle_difference + adjustment
         if abs(wz) > max_angular_velocity:
             wz = max_angular_velocity if wz > 0 else -max_angular_velocity
+
+        # Reducir velocidad lineal al esquivar
+        if adjustment != 0.0:
+            vx *= 0.8
 
         # Publicar mensaje de velocidad
         cmd_vel_msg = Twist()
         cmd_vel_msg.linear.x = vx
         cmd_vel_msg.angular.z = wz
         self.cmd_vel_publisher.publish(cmd_vel_msg)
-        
+
+        # Publicar estado
+        if distance_to_person < 0.1:
+            self.publish_status("Detenido: demasiado cerca de la persona")
+        elif adjustment != 0.0:
+            self.publish_status("Esquivando obstáculo")
+        else:
+            self.publish_status("Siguiendo a la persona")
+
+        # Log
         self.get_logger().info(f"Distancia: {distance_to_person:.2f} m, Ángulo: {math.degrees(angle_to_person):.2f}°, Vel. Lineal: {vx:.2f}, Vel. Angular: {wz:.2f}")
 
     def stop_robot(self):
