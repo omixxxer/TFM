@@ -5,20 +5,35 @@ import cv2
 from cv_bridge import CvBridge
 from std_msgs.msg import String, Bool
 import time
-
+import numpy as np
 
 class CameraNode(Node):
     def __init__(self):
         super().__init__('camera_node')
 
-        # Declarar parámetros
-        self.declare_parameter('enabled', True)
-        self.enabled = self.get_parameter('enabled').value
 
+        # Declarar parámetros necesarios
+        self.declare_parameter('enabled', True)
+        self.declare_parameter('yolov4_weights_path', '')
+        self.declare_parameter('yolov4_cfg_path', '')
+        self.declare_parameter('coco_names_path', '')
+
+        # Leer los valores de los parámetros
+        self.enabled = self.get_parameter('enabled').value
+        weights_path = self.get_parameter('yolov4_weights_path').value
+        cfg_path = self.get_parameter('yolov4_cfg_path').value
+        names_path = self.get_parameter('coco_names_path').value
+
+
+        # Verificar si el nodo está habilitado
         if not self.enabled:
             self.get_logger().info("Nodo de Cámara desactivado.")
             return
 
+        # Validar que las rutas no estén vacías
+        if not weights_path or not cfg_path or not names_path:
+            self.get_logger().error("Rutas de YOLO no proporcionadas. Revisa el archivo de lanzamiento.")
+            return
         # Inicializar suscriptor al topic de imágenes publicadas por usb_cam_node_exe
         self.bridge = CvBridge()
         self.image_subscriber = self.create_subscription(
@@ -38,7 +53,16 @@ class CameraNode(Node):
         self.last_processed_time = time.time()
         self.processing_interval = 0.5  # Procesar una imagen cada 0.5 segundos
 
-        self.get_logger().info("Nodo de Cámara personalizado iniciado, procesando imágenes.")
+        # Inicializar YOLO
+        self.get_logger().info(f"Cargando modelo YOLO desde:\nPesos: {weights_path}\nConfig: {cfg_path}\nClases: {names_path}")
+        self.net = cv2.dnn.readNet(weights_path, cfg_path)
+        self.layer_names = self.net.getLayerNames()
+        self.output_layers = [self.layer_names[i[0] - 1] for i in self.net.getUnconnectedOutLayers()]
+        self.classes = []
+        with open("coco.names", "r") as f:
+            self.classes = [line.strip() for line in f.readlines()]
+
+        self.get_logger().info("Nodo de Cámara personalizado iniciado, procesando imágenes con YOLO.")
 
     def process_image_callback(self, msg):
         """Callback para procesar las imágenes recibidas."""
@@ -48,28 +72,67 @@ class CameraNode(Node):
 
         self.last_processed_time = current_time
         try:
-            self.get_logger().info("Imagen recibida. Iniciando procesamiento...")
+            self.get_logger().info("Imagen recibida. Iniciando procesamiento con YOLO...")
 
             # Convertir mensaje ROS a imagen OpenCV
             frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
             self.get_logger().info("Imagen convertida a formato OpenCV.")
 
-            # Procesar la imagen (ejemplo: convertir a escala de grises)
+            # Procesar la imagen para detectar personas con YOLO
             processed_frame = self.process_image(frame)
             self.get_logger().info("Procesamiento de imagen completado.")
 
             # Mostrar la imagen procesada
+            cv2.namedWindow("Processed Image", cv2.WINDOW_NORMAL)  # Permitir redimensionamiento manual
             cv2.imshow("Processed Image", processed_frame)
+            cv2.resizeWindow("Processed Image", 800, 600)  # Establecer tamaño específico
             cv2.waitKey(1)
 
         except Exception as e:
             self.get_logger().error(f"Error procesando la imagen: {e}")
 
     def process_image(self, frame):
-        """Realiza el procesamiento adicional de la imagen."""
-        # Ejemplo: Convertir la imagen a escala de grises
-        self.get_logger().debug("Convirtiendo imagen a escala de grises...")
-        return cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        """Realiza el procesamiento adicional de la imagen para detectar personas usando YOLO."""
+        # Preparar la imagen para YOLO
+        blob = cv2.dnn.blobFromImage(frame, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
+        self.net.setInput(blob)
+        outs = self.net.forward(self.output_layers)
+
+        # Inicializar listas para los resultados de la detección
+        height, width, channels = frame.shape
+        boxes = []
+        confidences = []
+        class_ids = []
+
+        # Analizar las detecciones
+        for out in outs:
+            for detection in out:
+                scores = detection[5:]
+                class_id = np.argmax(scores)
+                confidence = scores[class_id]
+                if confidence > 0.5 and self.classes[class_id] == "person":
+                    # Obtener las coordenadas del cuadro delimitador
+                    center_x = int(detection[0] * width)
+                    center_y = int(detection[1] * height)
+                    w = int(detection[2] * width)
+                    h = int(detection[3] * height)
+                    x = int(center_x - w / 2)
+                    y = int(center_y - h / 2)
+
+                    boxes.append([x, y, w, h])
+                    confidences.append(float(confidence))
+                    class_ids.append(class_id)
+
+        # Aplicar supresión de no máximos para eliminar detecciones redundantes
+        indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
+        for i in range(len(boxes)):
+            if i in indexes:
+                x, y, w, h = boxes[i]
+                label = str(self.classes[class_ids[i]])
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                cv2.putText(frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+        return frame
 
     def initialize_shutdown_listener(self):
         """Inicializa el suscriptor para manejar el cierre del sistema."""
@@ -88,7 +151,6 @@ class CameraNode(Node):
                 self.destroy_node()
                 cv2.destroyAllWindows()  # Liberar ventanas de OpenCV al cerrar el nodo
 
-
 def main(args=None):
     rclpy.init(args=args)
     node = CameraNode()
@@ -99,7 +161,6 @@ def main(args=None):
     finally:
         node.destroy_node()
         cv2.destroyAllWindows()
-
 
 if __name__ == '__main__':
     main()

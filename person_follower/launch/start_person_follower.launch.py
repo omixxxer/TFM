@@ -4,17 +4,20 @@ import os
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
-    config_path = os.path.join(
-        get_package_share_directory('person_follower'),
-        'config',
-        'config.yaml'
-    )
+    # Rutas del paquete
+    package_share_directory = get_package_share_directory('person_follower')
 
-    rviz_config_path = os.path.join(
-        get_package_share_directory('person_follower'),
-        'config',
-        'tb2.rviz'  # Archivo de configuración de RViz 2
-    )
+    # Ruta del archivo de configuración
+    config_path = os.path.join(package_share_directory, 'config', 'config.yaml')
+
+    # Ruta del archivo de configuración de RViz
+    rviz_config_path = os.path.join(package_share_directory, 'config', 'tb2.rviz')
+
+    # Rutas de los modelos YOLO
+    model_path = os.path.join(package_share_directory, 'model')
+    yolov4_weights_path = os.path.join(model_path, 'yolov4.weights')
+    yolov4_cfg_path = os.path.join(model_path, 'yolov4.cfg')
+    coco_names_path = os.path.join(model_path, 'coco.names')
 
     return LaunchDescription([
         Node(
@@ -38,7 +41,12 @@ def generate_launch_description():
             executable='camera_node',
             name='camera_node',
             output='screen',
-            parameters=[config_path]
+            parameters=[{
+                'enabled': True,
+                'yolov4_weights_path': yolov4_weights_path,
+                'yolov4_cfg_path': yolov4_cfg_path,
+                'coco_names_path': coco_names_path
+            }]
         ),
         Node(
             package='person_follower',
@@ -55,3 +63,4 @@ def generate_launch_description():
             parameters=[config_path]
         )
     ])
+
