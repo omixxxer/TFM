@@ -15,14 +15,14 @@ class DetectionNode(Node):
         self.declare_parameter('enabled', True)
         self.declare_parameter('max_detection_distance', 5.0)
         self.declare_parameter('min_detection_distance', 0.1)
-        self.declare_parameter('dbscan_eps', 0.08)
+        self.declare_parameter('dbscan_eps', 0.1)
         self.declare_parameter('dbscan_min_samples', 15)
         self.declare_parameter('min_leg_cluster_size', 40)
         self.declare_parameter('max_leg_cluster_size', 80)
         self.declare_parameter('min_leg_radius', 0.01)
         self.declare_parameter('max_leg_radius', 0.05)
         self.declare_parameter('min_leg_distance', 0.02)
-        self.declare_parameter('max_leg_distance', 0.2)
+        self.declare_parameter('max_leg_distance', 0.4)
         self.declare_parameter('median_filter_window', 7)  # Nuevo parámetro para el filtro de mediana
 
         # Obtener valores de parámetros desde la configuración

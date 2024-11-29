@@ -2,6 +2,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Bool, String
 from std_srvs.srv import SetBool
+from geometry_msgs.msg import Twist
 
 
 class ControlNode(Node):
@@ -10,37 +11,35 @@ class ControlNode(Node):
 
         # Declaración de parámetros con valores predeterminados
         self.declare_parameter('tracking_enabled', True)
-        self.declare_parameter('camera_enabled', True)
-        self.declare_parameter('ui_enabled', True)
-        self.declare_parameter('detection_enabled', True)
 
         # Inicialización de parámetros
         self.tracking_enabled = self.get_parameter('tracking_enabled').value
-        self.camera_enabled = self.get_parameter('camera_enabled').value
-        self.ui_enabled = self.get_parameter('ui_enabled').value
-        self.detection_enabled = self.get_parameter('detection_enabled').value
+
+        # Estados de la FSM
+        self.states = ['INIT', 'IDLE', 'TRACKING', 'SHUTDOWN']
+        self.current_state = 'INIT'
 
         # Estado del sistema
         self.person_detected = False
         self.tracking_service_ready = False
-        self.shutdown_confirmations = 0
-        self.total_nodes = 4  # Ajustar según el número total de nodos secundarios
 
         # Subscripciones
-        self.create_subscription(String, '/camera/status', self.camera_status_callback, 10)
-        self.create_subscription(String, '/detection/status', self.detection_status_callback, 10)
-        self.create_subscription(String, '/tracking/status', self.tracking_status_callback, 10)
         self.create_subscription(Bool, '/person_detected', self.person_detected_callback, 10)
         self.create_subscription(Bool, '/shutdown_confirmation', self.shutdown_confirmation_callback, 10)
+        self.velocity_subscription = self.create_subscription(Twist,'/tracking/velocity_cmd',self.velocity_callback,10)
+
 
         # Publicador de cierre de nodos secundarios
         self.shutdown_publisher = self.create_publisher(Bool, '/system_shutdown', 10)
+        self.cmd_vel_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
+
 
         # Cliente para activar/desactivar el seguimiento
         self.tracking_client = self.create_client(SetBool, 'enable_tracking')
         self.wait_for_service(self.tracking_client, 'enable_tracking')
 
-        self.get_logger().info("Nodo de Control iniciado con las funcionalidades configuradas.")
+        self.get_logger().info("Nodo de Control iniciado.")
+        self.transition_to('IDLE')
 
     def wait_for_service(self, client, service_name):
         """Espera hasta que el servicio esté disponible."""
@@ -50,57 +49,82 @@ class ControlNode(Node):
         self.get_logger().info(f"Servicio {service_name} listo.")
         self.tracking_service_ready = True
 
-    def camera_status_callback(self, msg):
-        self.get_logger().info(f"Estado de la cámara: {msg.data}")
+    def velocity_callback(self, msg):
+        """Publica las velocidades recibidas desde el nodo de seguimiento en /cmd_vel."""
+        if self.current_state == 'TRACKING':
+            self.cmd_vel_publisher.publish(msg)
+            self.get_logger().info(f"Velocidad publicada: lineal={msg.linear.x:.2f}, angular={msg.angular.z:.2f}")
+        else:
+            # Si no está en TRACKING, detén el robot
+            self.stop_robot()
 
-    def detection_status_callback(self, msg):
-        self.get_logger().info(f"Estado del nodo de detección: {msg.data}")
+    def stop_robot(self):
+        """Detiene el robot publicando un mensaje de velocidad cero."""
+        stop_msg = Twist()
+        stop_msg.linear.x = 0.0
+        stop_msg.angular.z = 0.0
+        self.cmd_vel_publisher.publish(stop_msg)
+        self.get_logger().info("Robot detenido.")
 
-    def tracking_status_callback(self, msg):
-        self.get_logger().info(f"Estado del nodo de seguimiento: {msg.data}")
 
-    def shutdown_confirmation_callback(self, msg):
-        if msg.data:
-            self.shutdown_confirmations += 1
-            self.get_logger().info(f"Confirmación de cierre recibida ({self.shutdown_confirmations}/{self.total_nodes}).")
+
+    def transition_to(self, new_state):
+        """Gestiona las transiciones de estado de la FSM."""
+        if new_state not in self.states:
+            self.get_logger().error(f"Estado inválido: {new_state}")
+            return
+
+        self.get_logger().info(f"Transición de {self.current_state} a {new_state}")
+        self.current_state = new_state
+
+        # Acciones asociadas con el nuevo estado
+        if new_state == 'IDLE':
+            self.handle_idle()
+        elif new_state == 'TRACKING':
+            self.start_tracking()
+        elif new_state == 'SHUTDOWN':
+            self.notify_shutdown()
+
+    def handle_idle(self):
+        """Acciones mientras el sistema está en espera."""
+        self.get_logger().info("Sistema en modo IDLE. Esperando detecciones...")
+
+    def start_tracking(self):
+        """Acciones para iniciar el seguimiento."""
+        if self.tracking_service_ready:
+            self.toggle_tracking(True)
+            self.get_logger().info("Iniciando seguimiento...")
+        else:
+            self.get_logger().error("El servicio de seguimiento no está listo. Volviendo a IDLE.")
+            self.transition_to('IDLE')
 
     def notify_shutdown(self):
         """Notificar a los nodos secundarios para que se cierren."""
         self.shutdown_publisher.publish(Bool(data=True))
         self.get_logger().info("Notificación de cierre enviada a los nodos secundarios.")
-        rclpy.spin_once(self, timeout_sec=0.2)  # Breve delay para enviar el mensaje
-        
-        timeout = 10  # Tiempo máximo de espera en segundos
-        start_time = self.get_clock().now().seconds_nanoseconds()[0]
-        while self.shutdown_confirmations < self.total_nodes:
-            elapsed_time = self.get_clock().now().seconds_nanoseconds()[0] - start_time
-            if elapsed_time > timeout:
-                self.get_logger().warn("No se recibieron todas las confirmaciones. Procediendo con el cierre.")
-                break
-            self.get_logger().info("Esperando confirmaciones de cierre...")
-            rclpy.spin_once(self, timeout_sec=0.5)
-        self.get_logger().info("Cierre centralizado completado.")
+        self.destroy_node()
 
     def person_detected_callback(self, msg):
-        try:
-            if msg.data != self.person_detected:
-                self.person_detected = msg.data
-                self.get_logger().info(f"Persona {'detectada' if self.person_detected else 'no detectada'}.")
-                self.toggle_tracking(self.person_detected)
-        except Exception as e:
-            self.get_logger().error(f"Error al procesar la detección de persona: {e}")
+        """Callback para manejar detección de personas."""
+        self.person_detected = msg.data
+        if self.person_detected and self.current_state == 'IDLE':
+            self.transition_to('TRACKING')
+        elif not self.person_detected and self.current_state == 'TRACKING':
+            self.transition_to('IDLE')
+
+    def shutdown_confirmation_callback(self, msg):
+        """Callback para manejar confirmación de cierre."""
+        if msg.data:
+            self.transition_to('SHUTDOWN')
 
     def toggle_tracking(self, enable):
-        """Habilita o deshabilita el seguimiento según la detección de personas."""
+        """Habilita o deshabilita el seguimiento según el estado actual."""
         if not self.tracking_service_ready:
             self.get_logger().warn("El servicio de seguimiento aún no está listo.")
             return
 
-    	# Crea la solicitud para activar/desactivar el seguimiento
         request = SetBool.Request()
         request.data = enable
-        
-        # Llama al servicio y maneja la respuesta 
         future = self.tracking_client.call_async(request)
         future.add_done_callback(self.handle_tracking_response)
 
@@ -108,10 +132,7 @@ class ControlNode(Node):
         """Maneja la respuesta del servicio de seguimiento."""
         try:
             response = future.result()
-            if response.success:
-                self.get_logger().info(f"Seguimiento {'habilitado' if response.success else 'deshabilitado'}.")
-            else:
-                self.get_logger().warn(f"Error al habilitar el seguimiento: {response.message}")
+            self.get_logger().info(f"Seguimiento {'habilitado' if response.success else 'deshabilitado'}.")
         except Exception as e:
             self.get_logger().error(f"Error en la respuesta del servicio de seguimiento: {e}")
 
@@ -124,11 +145,10 @@ def main(args=None):
     except KeyboardInterrupt:
         node.get_logger().info("Nodo de Control detenido manualmente.")
     finally:
-        node.notify_shutdown()  # Notificar a los nodos secundarios
-        node.destroy_node()     # Destruir el nodo de control
-        rclpy.shutdown()        # Cerrar el sistema
+        node.notify_shutdown()
+        node.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':
     main()
-
