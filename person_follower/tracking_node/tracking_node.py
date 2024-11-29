@@ -38,6 +38,7 @@ class TrackingNode(Node):
 
         self.status_publisher = self.create_publisher(String, '/tracking/status', 10)
         self.velocity_publisher = self.create_publisher(Twist, '/tracking/velocity_cmd', 10)
+        self.position_publisher = self.create_publisher(Point, '/expected_person_position', 10)  # Publicador de la posición esperada
 
         self.person_detected = False
         self.person_position = None  # Posición actual de la persona
@@ -78,6 +79,9 @@ class TrackingNode(Node):
         self.person_position = Point(x=self.kalman_state[0], y=self.kalman_state[1])
         self.last_person_update_time = self.get_clock().now()
 
+        # Publicar la posición estimada
+        self.position_publisher.publish(self.person_position)
+
         self.get_logger().info(f"Posición estimada (Kalman): x={self.person_position.x:.2f}, y={self.person_position.y:.2f}")
 
     def avoid_obstacles(self, input_msg):
@@ -113,8 +117,8 @@ class TrackingNode(Node):
 
         # Velocidad lineal
         max_speed = 0.8
-        acceleration_limit = 0.01
-        smoothing_factor = 0.8
+        acceleration_limit = 0.005
+        smoothing_factor = 0.3
         target_vx = min(max_speed, max(0.0, max_speed * (distance_to_person - 0.1) / 0.9)) if distance_to_person > 0.1 else 0.0
         filtered_vx = self.previous_vx * smoothing_factor + target_vx * (1 - smoothing_factor)
         vx = self.previous_vx + min(acceleration_limit, max(-acceleration_limit, filtered_vx - self.previous_vx))
@@ -167,7 +171,6 @@ class TrackingNode(Node):
             finally:
                 self.destroy_node()
 
-
 def main(args=None):
     rclpy.init(args=args)
     node = TrackingNode()
@@ -177,7 +180,6 @@ def main(args=None):
         node.get_logger().info("Nodo de Seguimiento detenido manualmente.")
     finally:
         node.destroy_node()
-
 
 if __name__ == '__main__':
     main()

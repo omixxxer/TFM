@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Bool, String, Float32MultiArray
+from geometry_msgs.msg import Point
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -22,6 +23,7 @@ class UserInterfaceNode(Node):
         self.create_subscription(Bool, '/person_detected', self.person_detected_callback, 10)
         self.create_subscription(Float32MultiArray, '/clusters/general', self.visualize_general_clusters_callback, 10)
         self.create_subscription(Float32MultiArray, '/clusters/legs', self.visualize_leg_clusters_callback, 10)
+        self.create_subscription(Point, '/expected_person_position', self.visualize_person_position_callback, 10)
 
         # Publicador para confirmar el apagado
         self.shutdown_confirmation_publisher = self.create_publisher(Bool, '/shutdown_confirmation', 10)
@@ -39,12 +41,11 @@ class UserInterfaceNode(Node):
         # Inicialización de objetos scatter
         self.general_clusters_scatter = None
         self.leg_clusters_scatter = None
-
+        self.person_position_scatter = None
 
         # Configuración de Matplotlib para visualización en tiempo real
         plt.ion()
         self.fig, self.ax = plt.subplots(figsize=(8, 6))
-
 
         # Timer para mostrar el estado en la terminal cada 5 segundos
         self.timer = self.create_timer(5.0, self.display_status)
@@ -96,6 +97,10 @@ class UserInterfaceNode(Node):
         data = np.array(msg.data)
         if data.size == 0:
             self.get_logger().info("No hay clusters generales para visualizar.")
+            if self.general_clusters_scatter is not None:
+                self.general_clusters_scatter.remove()
+                self.general_clusters_scatter = None
+            self.update_plot()
             return
 
         # Reorganizar los datos en pares (x, y)
@@ -132,6 +137,10 @@ class UserInterfaceNode(Node):
         data = np.array(msg.data)
         if data.size == 0:
             self.get_logger().info("No hay clusters de piernas para visualizar.")
+            if self.leg_clusters_scatter is not None:
+                self.leg_clusters_scatter.remove()
+                self.leg_clusters_scatter = None
+            self.update_plot()
             return
 
         # Reorganizar los datos en pares (x, y)
@@ -145,6 +154,22 @@ class UserInterfaceNode(Node):
             )  # s: tamaño de los puntos
         else:
             self.leg_clusters_scatter.set_offsets(points)
+
+        # Actualizar la visualización
+        self.update_plot()
+
+    def visualize_person_position_callback(self, msg):
+        """Visualiza la posición esperada de la persona."""
+        person_position = np.array([msg.x, msg.y])
+
+        # Actualizar la posición esperada de la persona
+        if self.person_position_scatter is None:
+            self.person_position_scatter = self.ax.scatter(
+                person_position[0], person_position[1],
+                c='green', s=50, alpha=0.9, marker='x', label='Posición Estimada de la Persona'
+            )  # s: tamaño de los puntos
+        else:
+            self.person_position_scatter.set_offsets(person_position)
 
         # Actualizar la visualización
         self.update_plot()
@@ -172,7 +197,6 @@ def main(args=None):
         node.get_logger().info("Nodo Interfaz de Usuario detenido manualmente.")
     finally:
         node.destroy_node()
-
 
 if __name__ == '__main__':
     main()
