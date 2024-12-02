@@ -15,8 +15,8 @@ def generate_launch_description():
 
     # Rutas de los modelos YOLO
     model_path = os.path.join(package_share_directory, 'model')
-    yolov4_weights_path = os.path.join(model_path, 'yolov4.weights')
-    yolov4_cfg_path = os.path.join(model_path, 'yolov4.cfg')
+    yolov4_weights_path = os.path.join(model_path, 'yolov4-tiny.weights')
+    yolov4_cfg_path = os.path.join(model_path, 'yolov4-tiny.cfg')
     coco_names_path = os.path.join(model_path, 'coco.names')
 
     return LaunchDescription([

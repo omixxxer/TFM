@@ -17,7 +17,7 @@ class DetectionNode(Node):
         self.declare_parameter('min_detection_distance', 0.1)
         self.declare_parameter('dbscan_eps', 0.1)
         self.declare_parameter('dbscan_min_samples', 15)
-        self.declare_parameter('min_leg_cluster_size', 40)
+        self.declare_parameter('min_leg_cluster_size', 30)
         self.declare_parameter('max_leg_cluster_size', 80)
         self.declare_parameter('min_leg_radius', 0.01)
         self.declare_parameter('max_leg_radius', 0.05)

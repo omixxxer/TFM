@@ -11,7 +11,6 @@ class CameraNode(Node):
     def __init__(self):
         super().__init__('camera_node')
 
-
         # Declarar parámetros necesarios
         self.declare_parameter('enabled', True)
         self.declare_parameter('yolov4_weights_path', '')
@@ -24,7 +23,6 @@ class CameraNode(Node):
         cfg_path = self.get_parameter('yolov4_cfg_path').value
         names_path = self.get_parameter('coco_names_path').value
 
-
         # Verificar si el nodo está habilitado
         if not self.enabled:
             self.get_logger().info("Nodo de Cámara desactivado.")
@@ -34,7 +32,8 @@ class CameraNode(Node):
         if not weights_path or not cfg_path or not names_path:
             self.get_logger().error("Rutas de YOLO no proporcionadas. Revisa el archivo de lanzamiento.")
             return
-        # Inicializar suscriptor al topic de imágenes publicadas por usb_cam_node_exe
+
+        # Inicializar suscriptor al topic de imágenes publicadas
         self.bridge = CvBridge()
         self.image_subscriber = self.create_subscription(
             Image,
@@ -56,10 +55,19 @@ class CameraNode(Node):
         # Inicializar YOLO
         self.get_logger().info(f"Cargando modelo YOLO desde:\nPesos: {weights_path}\nConfig: {cfg_path}\nClases: {names_path}")
         self.net = cv2.dnn.readNet(weights_path, cfg_path)
+
+        # Obtener nombres de las capas y manejar los índices de salida
         self.layer_names = self.net.getLayerNames()
-        self.output_layers = [self.layer_names[i[0] - 1] for i in self.net.getUnconnectedOutLayers()]
-        self.classes = []
-        with open("coco.names", "r") as f:
+        unconnected_out_layers = self.net.getUnconnectedOutLayers()
+
+        # Manejo del cambio en getUnconnectedOutLayers
+        if isinstance(unconnected_out_layers, np.ndarray):
+            self.output_layers = [self.layer_names[i - 1] for i in unconnected_out_layers.flatten()]
+        else:
+            self.output_layers = [self.layer_names[i[0] - 1] for i in unconnected_out_layers]
+
+        # Leer nombres de las clases
+        with open(names_path, "r") as f:
             self.classes = [line.strip() for line in f.readlines()]
 
         self.get_logger().info("Nodo de Cámara personalizado iniciado, procesando imágenes con YOLO.")
@@ -82,10 +90,11 @@ class CameraNode(Node):
             processed_frame = self.process_image(frame)
             self.get_logger().info("Procesamiento de imagen completado.")
 
+            processed_frame_resized = cv2.resize(processed_frame, (1280, 720))    
+
             # Mostrar la imagen procesada
-            cv2.namedWindow("Processed Image", cv2.WINDOW_NORMAL)  # Permitir redimensionamiento manual
-            cv2.imshow("Processed Image", processed_frame)
-            cv2.resizeWindow("Processed Image", 800, 600)  # Establecer tamaño específico
+            cv2.namedWindow("Processed Image", cv2.WINDOW_NORMAL)
+            cv2.imshow("Processed Image", processed_frame_resized)
             cv2.waitKey(1)
 
         except Exception as e:
