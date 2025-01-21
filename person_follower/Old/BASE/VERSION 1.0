@@ -1,0 +1,203 @@
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import LaserScan
+from geometry_msgs.msg import Twist
+import math
+import time
+import numpy as np
+from sklearn.cluster import DBSCAN
+import matplotlib.pyplot as plt
+
+class PersonFollower(Node):
+
+    def __init__(self, enable_rotation=True, enable_visualization=True):  # Agregar parámetro para habilitar/deshabilitar rotación y visualización
+        super().__init__('person_follower')
+        self.publisher_ = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.subscription = self.create_subscription(
+            LaserScan,
+            '/scan',
+            self.listener_callback,
+            10)
+        self.subscription
+
+        # Variables de estado y parámetros
+        self.prev_angles = []  # Almacena ángulos anteriores para suavizado
+        self.last_angle = None  # Almacena el último ángulo del robot
+        self.last_angle_time = None  # Almacena el tiempo del último ángulo registrado
+        self.min_distance = 0.4  # Distancia mínima para evitar colisiones
+        self.angle_filter_window = 5  # Tamaño de ventana para suavizado de ángulo
+        self.person_detected = False  # Indica si se detecta a una persona
+        self.object_detected = False  # Indica si se detecta un objeto
+        self.rotation_triggered = False  # Indica si se ha activado la rotación
+        self.rotation_completed = False  # Indica si se completó la rotación de 180 grados
+        self.still_start_time = None  # Almacena el tiempo cuando el robot se vuelve inmóvil
+        self.still_timeout = 10  # Tiempo máximo en segundos para permanecer inmóvil antes de rotar
+        self.angle_tracking_timeout = 20  # Tiempo máximo en segundos para el seguimiento de ángulos antes de rotar
+        self.angle_mode = "360"  # Modo de ángulo: "360" o "0"
+        self.enable_rotation = enable_rotation  # Guardar la configuración de rotación
+        self.enable_visualization = enable_visualization  # Guardar la configuración de visualización
+
+        print("Iniciando")
+
+    def detect_person(self, ranges, angle_min, angle_increment):
+        # Convertir las mediciones de rango a coordenadas cartesianas
+        points = []
+        for i, r in enumerate(ranges):
+            if r < 1.5:  # Considerar solo distancias menores a 1.5 metros
+                angle = angle_min + i * angle_increment
+                x = r * np.cos(angle)
+                y = r * np.sin(angle)
+                points.append((x, y))
+
+        if len(points) == 0:
+            return False  # No hay detecciones válidas
+
+        # Agrupar puntos usando DBSCAN
+        points = np.array(points)
+        clustering = DBSCAN(eps=0.2, min_samples=3).fit(points)  # Ajustar eps y min_samples según sea necesario
+
+        # Verificar grupos detectados
+        labels = clustering.labels_
+        num_personas = len(set(labels)) - (1 if -1 in labels else 0)  # Ignorar ruido (-1)
+
+        # Imprimir información de depuración
+        print(f"Grupos detectados: {num_personas}")
+        print(f"Etiquetas de agrupamiento: {labels}")
+
+        # Graficar resultados de agrupamiento si está habilitada la visualización
+        if self.enable_visualization:
+            self.plot_clusters(points, labels)
+
+        if num_personas > 0:
+            return True  # Se detecta al menos una persona
+
+        return False  # No se detecta ninguna persona
+
+    def plot_clusters(self, points, labels):
+        unique_labels = set(labels)
+        plt.figure(figsize=(8, 6))
+
+        for label in unique_labels:
+            if label == -1:  # Ruido
+                color = 'k'  # Color negro para el ruido
+            else:
+                color = plt.cm.jet(float(label) / len(unique_labels))  # Colores para cada cluster
+
+            # Filtrar puntos por etiqueta
+            class_member_mask = (labels == label)
+            xy = points[class_member_mask]
+            plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=color, markeredgecolor='k', markersize=6)
+
+        plt.title('DBSCAN Clustering Result')
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.axis('equal')
+        plt.grid()
+        plt.show()
+
+    def smooth_angle(self, angle):
+        angles_rad = [math.radians(a) for a in self.prev_angles]
+        angle_rad = math.radians(angle)
+
+        angles_rad.append(angle_rad)
+
+        if len(angles_rad) > self.angle_filter_window:
+            angles_rad.pop(0)
+
+        avg_angle_rad = sum(math.atan2(math.sin(a), math.cos(a)) for a in angles_rad) / len(angles_rad)
+        avg_angle_deg = math.degrees(avg_angle_rad)
+
+        return avg_angle_deg
+
+    def listener_callback(self, input_msg):
+        angle_min = input_msg.angle_min
+        angle_max = input_msg.angle_max
+        angle_increment = input_msg.angle_increment
+        ranges = input_msg.ranges
+        
+        vx = 0.0  # Inicializar velocidad lineal
+        wz = 0.0  # Inicializar velocidad angular
+        
+        angle_to_person = 0  # Valor por defecto
+
+        if self.detect_person(ranges, angle_min, angle_increment):
+            self.person_detected = True
+            self.object_detected = False
+        else:
+            self.person_detected = False
+
+        if not self.person_detected and not self.object_detected:
+            self.object_detected = True
+
+        if self.person_detected:
+            if self.angle_mode == "360":
+                min_range_index = ranges.index(min(ranges))
+                angle_to_person = angle_min + min_range_index * angle_increment
+            else:
+                min_range_index = ranges[180]  # Índice medio para el ángulo frontal
+                angle_to_person = 0  # Ángulo frontal
+
+            if self.prev_angles:
+                angle_to_person = self.smooth_angle(angle_to_person - angle_min)
+
+            if min(ranges) < self.min_distance:
+                vx = 0.05  # Velocidad reducida
+            else:
+                vx = 0.35  # Velocidad normal
+
+            target_angle = angle_to_person
+            angle_difference = -target_angle  # Negativo para cambiar la orientación al moverse
+
+            max_angular_velocity = 0.6
+            if abs(angle_difference) > max_angular_velocity:
+                angle_difference = max_angular_velocity if angle_difference > 0 else -max_angular_velocity
+
+            wz = 2.0 * angle_difference
+
+            output_msg = Twist()
+            output_msg.linear.x = vx
+            output_msg.angular.z = wz
+            self.publisher_.publish(output_msg)
+
+            self.rotation_triggered = False
+            self.rotation_completed = False
+            self.still_start_time = None  # Reiniciar el tiempo para el seguimiento de inmovilidad
+            
+        else:
+            if not self.rotation_triggered:
+                if self.still_start_time is not None:
+                    current_time = time.time()
+                    elapsed_time = current_time - self.still_start_time
+                    if elapsed_time > self.angle_tracking_timeout and vx == 0 and wz == 0:
+                        self.rotation_triggered = True
+                else:
+                    if vx == 0 and wz == 0:
+                        self.still_start_time = time.time()
+            
+            # Solo ejecutar rotación si está habilitada
+            if self.rotation_triggered and not self.rotation_completed and self.enable_rotation:
+                self.rotate_180_degrees()
+
+    def rotate_180_degrees(self):
+        output_msg = Twist()
+        output_msg.angular.z = math.pi * 2  # Rotar a 2*pi rad/s (360 grados/s)
+        self.publisher_.publish(output_msg)
+        time.sleep(2)  # Esperar 2 segundos después de la rotación
+        output_msg.angular.z = 0.0  # Detener la rotación
+        self.publisher_.publish(output_msg)
+        self.rotation_completed = True  # Marcar como completada
+
+def main(args=None):
+    rclpy.init(args=args)
+
+    # Aquí puedes establecer enable_rotation a False si no deseas que realice la rotación
+    # Y enable_visualization a False si no deseas ver la visualización
+    person_follower = PersonFollower(enable_rotation=False, enable_visualization=True)
+
+    rclpy.spin(person_follower)
+
+    person_follower.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,204 @@
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import LaserScan
+from geometry_msgs.msg import Twist
+import math
+import time
+
+class PersonFollower(Node):
+
+    def __init__(self):
+        super().__init__('person_follower')
+        self.publisher_ = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.subscription = self.create_subscription(
+            LaserScan,
+            '/scan',
+            self.listener_callback,
+            10)
+        self.subscription
+
+        self.prev_angles = []  # Store previous angles for angle smoothing
+        self.last_angle = None  # Store the last angle of the robot
+        self.last_angle_time = None  # Store the time when the last angle was recorded
+        self.min_distance = 0.4  # Set a minimum distance to avoid collisions
+        self.angle_filter_window = 5  # Window size for angle smoothing
+
+        self.person_detected = False  # Flag to indicate if a person is currently detected
+        self.object_detected = False  # Flag to indicate if an object is currently detected
+        self.rotation_completed = False  # Flag to indicate if the 180-degree rotation is completed
+        
+        # Define the range of indices to consider from the laser scan
+        self.min_index = 90  # Minimum index to consider
+        self.max_index = 270  # Maximum index to consider
+        
+        print("Iniciando")
+
+    def detect_person(self, ranges):
+        # Logic to determine if there is a person in the laser data
+        min_range = min(ranges[self.min_index:self.max_index])  # Consider only the specified range
+        person_threshold = 1.5  # Threshold for person detection
+        obstacle_threshold = 0.25  # Threshold for obstacle detection
+        
+        # Check if the minimum range is below the obstacle threshold
+        if min_range < obstacle_threshold:
+            return False  # If there's an obstacle too close, don't consider it as a person
+        
+        # Check if the minimum range is below the person threshold
+        if min_range < person_threshold:
+            return True  # If the range is below the person threshold, consider it as a person
+        
+        # If neither obstacle nor person is detected, return False
+        return False
+
+    def smooth_angle(self, angle):
+        # Convert angles to radians and ensure they are within the range [-pi, pi]
+        angles_rad = [math.radians(a) for a in self.prev_angles]
+        angle_rad = math.radians(angle)
+
+        # Add the new angle to the list of previous angles
+        angles_rad.append(angle_rad)
+
+        # If the list exceeds the size of the window, remove the oldest angle
+        if len(angles_rad) > self.angle_filter_window:
+            angles_rad.pop(0)
+
+        # Calculate the average angle from the angles stored in the list
+        avg_angle_rad = sum(math.atan2(math.sin(a), math.cos(a)) for a in angles_rad) / len(angles_rad)
+        
+        # Convert the average angle back to degrees
+        avg_angle_deg = math.degrees(avg_angle_rad)
+
+        return avg_angle_deg
+
+    def listener_callback(self, input_msg):
+        angle_min = input_msg.angle_min
+        angle_max = input_msg.angle_max
+        angle_increment = input_msg.angle_increment
+        ranges = input_msg.ranges
+        
+        # Consider only the specified range of indices from the laser scan
+        ranges = ranges[self.min_index:self.max_index]
+
+        angle_to_person = 0  # Set a default value
+
+        # Check if a person is detected
+        if self.detect_person(ranges):
+            self.person_detected = True
+            self.object_detected = False
+        else:
+            self.person_detected = False
+
+        # Check if an object is detected
+        if not self.person_detected and not self.object_detected:
+            # Logic to determine if there's an object in the laser data
+            # For now, let's assume an object is detected if there's no person
+            self.object_detected = True
+
+        if self.person_detected:
+            # Find the index of the minimum range (closest obstacle)
+            min_range_index = ranges.index(min(ranges))
+
+            # Calculate the angle to the person
+            angle_to_person = angle_min + (min_range_index + self.min_index) * angle_increment
+            
+            print("Angle being followed:", angle_to_person)
+
+            # Smooth out the angle change
+            if self.prev_angles:
+                angle_to_person = self.smooth_angle(angle_to_person - angle_min)
+
+            # Check if the robot is too close to the person
+            if min(ranges) < self.min_distance:
+                # Reduce the forward velocity
+                vx = 0.05  # Reduced velocity
+            else:
+                vx = 0.35  # Normal velocity
+
+            # Use the angle to the person as the target angle for the robot to aim towards
+            target_angle = angle_to_person
+            
+            print("Angle being followed:", angle_to_person)
+
+            # Calculate the difference between the target angle and the current angle (heading) of the robot
+            angle_difference = -target_angle  # Negative to change the orientation to move
+
+            # Limit the angular velocity to avoid excessive spinning
+            max_angular_velocity = 0.6
+            if abs(angle_difference) > max_angular_velocity:
+                angle_difference = max_angular_velocity if angle_difference > 0 else -max_angular_velocity
+
+            # Set the angular velocity of the robot based on the difference in angles
+            wz = 2.0 * angle_difference
+
+            # Create Twist message and publish
+            output_msg = Twist()
+            output_msg.linear.x = vx
+            output_msg.angular.z = wz
+            self.publisher_.publish(output_msg)
+            
+            print("Robot moving towards the person.")
+            
+            # Reset the rotation completion flag
+            self.rotation_completed = False
+            
+        else:
+            self.stop_robot()
+            print("No person detected. Stopping the robot.")
+            
+            # Check if the rotation is completed and initiate rotation if not
+            if not self.rotation_completed:
+                self.rotate_180_degrees()
+                self.rotation_completed = True  # Set the flag to True after completing the rotation
+
+            # Check if the robot's angle remained same for a significant time
+            if self.last_angle is not None and angle_to_person == self.last_angle:
+                if self.last_angle_time is None:
+                    self.last_angle_time = time.time()
+                else:
+                    elapsed_time = time.time() - self.last_angle_time
+                    if elapsed_time > 10:  # Check if angle remained same for 10 seconds
+                        # Rotate the robot 180 degrees
+                        print("Robot has been in the same angle for 10 seconds. Rotating 180 degrees.")
+                        self.rotate_180_degrees()
+            else:
+                self.last_angle = angle_to_person
+                self.last_angle_time = None
+
+        
+
+    def stop_robot(self):
+        # Stop the robot
+        output_msg = Twist()
+        output_msg.linear.x = 0.0
+        output_msg.angular.z = 0.0
+        self.publisher_.publish(output_msg)
+
+    def get_robot_angle(self, ranges, angle_min, angle_increment):
+        min_range_index = ranges.index(min(ranges))
+        return angle_min + min_range_index * angle_increment
+
+    def rotate_180_degrees(self):
+        # Rotate the robot 180 degrees
+        output_msg = Twist()
+        output_msg.angular.z = math.pi  # Rotate at pi rad/s (180 degrees/s)
+        self.publisher_.publish(output_msg)
+        time.sleep(2)  # Rotate for 2 seconds
+        output_msg.angular.z = 0.0  # Stop rotation
+        self.publisher_.publish(output_msg)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    person_follower = PersonFollower()
+
+    # Introduce a delay to let the robot settle before starting to process laser data
+    time.sleep(5)
+    
+    print("Starting robot movement.")
+    
+    rclpy.spin(person_follower)
+    person_follower.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
