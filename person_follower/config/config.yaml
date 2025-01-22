@@ -6,7 +6,7 @@ control_node:
     ui_enabled: True
     detection_enabled: True
     collision_handling_enabled: True
-    slam_enanled: True
+    slam_enabled: True
 
 tracking_node:
   ros__parameters:
@@ -28,7 +28,7 @@ user_interface_node:
   ros__parameters:
     enabled: True  # Controla si el user_interface_node está activo o no
 
-slam_node:
+SLAM_node:
   ros__parameters:
     enabled: True  # Controla si el slam_node está activo o no
 

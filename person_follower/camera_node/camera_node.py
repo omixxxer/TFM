@@ -45,6 +45,8 @@ class CameraNode(Node):
         # Publicador de estado
         self.status_publisher = self.create_publisher(String, '/camera/status', 10)
 
+        self.shutdown_subscription = self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
+
         # Inicializar lógica de cierre
         self.initialize_shutdown_listener()
 

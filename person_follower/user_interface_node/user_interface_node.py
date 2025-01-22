@@ -1,10 +1,8 @@
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Bool, String, Float32MultiArray
-from geometry_msgs.msg import Point
-from nav_msgs.msg import OccupancyGrid
-import matplotlib.pyplot as plt
-import numpy as np
+from std_msgs.msg import Bool, String
+import subprocess
+
 
 class UserInterfaceNode(Node):
     def __init__(self):
@@ -17,54 +15,45 @@ class UserInterfaceNode(Node):
             self.get_logger().info("Nodo de Interfaz de Usuario desactivado.")
             return
 
+        self.initialize_shutdown_listener()
+
         # Subscripciones para obtener estados
         self.create_subscription(String, '/camera/status', self.camera_status_callback, 10)
         self.create_subscription(String, '/detection/status', self.detection_status_callback, 10)
         self.create_subscription(String, '/tracking/status', self.tracking_status_callback, 10)
         self.create_subscription(Bool, '/person_detected', self.person_detected_callback, 10)
-        self.create_subscription(Float32MultiArray, '/clusters/general', self.visualize_general_clusters_callback, 10)
-        self.create_subscription(Float32MultiArray, '/clusters/legs', self.visualize_leg_clusters_callback, 10)
-        self.create_subscription(Point, '/expected_person_position', self.visualize_person_position_callback, 10)
-        self.create_subscription(OccupancyGrid, '/map', self.visualize_map_callback, 10)
-        self.create_subscription(Float32MultiArray, '/planned_path', self.visualize_planned_path_callback, 10)
-
-        # Publicador para confirmar el apagado
-        self.shutdown_confirmation_publisher = self.create_publisher(Bool, '/shutdown_confirmation', 10)
-        self.shutdown_subscription = self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
 
         # Estado del sistema
         self.person_detected = False
         self.camera_status = "Desconocido"
         self.detection_status = "Desconocido"
         self.tracking_status = "Desconocido"
-
-        # Estado previo para evitar logs repetitivos
         self.previous_status = {}
 
-        # Inicialización de objetos scatter
-        self.general_clusters_scatter = None
-        self.leg_clusters_scatter = None
-        self.person_position_scatter = None
-
-        # Configuración de Matplotlib para visualización en tiempo real
-        plt.ion()
-        self.fig, self.ax = plt.subplots(figsize=(8, 6))
+        # Iniciar RViz2 al iniciar el nodo
+        self.start_rviz()
 
         # Timer para mostrar el estado en la terminal cada 5 segundos
         self.timer = self.create_timer(5.0, self.display_status)
 
         self.get_logger().info("Nodo de Interfaz de Usuario iniciado.")
 
-    def shutdown_callback(self, msg):
-        """Callback para manejar la notificación de cierre del sistema."""
-        if msg.data:
-            self.get_logger().info("Cierre del sistema detectado. Enviando confirmación.")
-            try:
-                self.shutdown_confirmation_publisher.publish(Bool(data=True))
-            except Exception as e:
-                self.get_logger().error(f"Error al publicar confirmación de apagado: {e}")
-            finally:
-                self.destroy_node()
+    def start_rviz(self):
+        """Inicia RViz2 con un archivo de configuración predeterminado."""
+        rviz_config_path = '/home/usuario/ros2_ws/src/rviz/config.rviz'  # Ruta de tu archivo config.rviz
+        try:
+            self.rviz_process = subprocess.Popen(['rviz2', '-d', rviz_config_path])
+            self.get_logger().info(f"RViz2 iniciado con configuración: {rviz_config_path}")
+        except FileNotFoundError as e:
+            self.get_logger().error(f"No se pudo iniciar RViz2. Verifica la instalación. Error: {e}")
+        except Exception as e:
+            self.get_logger().error(f"Error al iniciar RViz2: {e}")
+
+    def stop_rviz(self):
+        """Detiene el proceso de RViz2 si está en ejecución."""
+        if hasattr(self, 'rviz_process') and self.rviz_process:
+            self.rviz_process.terminate()
+            self.get_logger().info("RViz2 detenido.")
 
     def camera_status_callback(self, msg):
         self.camera_status = msg.data
@@ -95,103 +84,28 @@ class UserInterfaceNode(Node):
             print("==========================")
             self.previous_status = current_status
 
-    def visualize_map_callback(self, msg):
-        """Visualiza el mapa recibido del nodo SLAM."""
-        width = msg.info.width
-        height = msg.info.height
-        resolution = msg.info.resolution
-        origin_x = msg.info.origin.position.x
-        origin_y = msg.info.origin.position.y
-        grid = np.array(msg.data).reshape((height, width))
+    def initialize_shutdown_listener(self):
+        """Inicializa el suscriptor para manejar el cierre del sistema."""
+        self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
+        self.shutdown_confirmation_publisher = self.create_publisher(Bool, '/shutdown_confirmation', 10)
 
-        plt.imshow(grid, extent=(origin_x, origin_x + width * resolution,
-                                 origin_y, origin_y + height * resolution),
-                   origin='lower', cmap='gray')
-        plt.title("Mapa SLAM")
-        plt.xlabel("X (metros)")
-        plt.ylabel("Y (metros)")
-        plt.colorbar(label="Valor del Mapa")
-        plt.draw()
-        plt.pause(0.001)
+    def shutdown_callback(self, msg):
+        """Callback para manejar la notificación de cierre del sistema."""
+        if msg.data:
+            self.get_logger().info("Cierre del sistema detectado. Enviando confirmación.")
+            self.stop_rviz()
+            try:
+                self.shutdown_confirmation_publisher.publish(Bool(data=True))
+            except Exception as e:
+                self.get_logger().error(f"Error al publicar confirmación de apagado: {e}")
+            finally:
+                self.destroy_node()
 
-    def visualize_planned_path_callback(self, msg):
-        """Visualiza la trayectoria planificada publicada por el nodo de seguimiento."""
-        data = np.array(msg.data)
-        if data.size == 0:
-            self.get_logger().info("No hay trayectoria planificada para visualizar.")
-            return
+    def destroy_node(self):
+        self.stop_rviz()
+        self.get_logger().info("Nodo de Interfaz de Usuario detenido.")
+        super().destroy_node()
 
-        path_points = data.reshape(-1, 2)
-        self.ax.plot(path_points[:, 0], path_points[:, 1], 'g-', linewidth=2, label='Trayectoria Planificada')
-        self.update_plot()
-
-    def visualize_general_clusters_callback(self, msg):
-        """Visualiza los clusters generales excluyendo los clusters de piernas."""
-        data = np.array(msg.data)
-        if data.size == 0:
-            self.get_logger().info("No hay clusters generales para visualizar.")
-            if self.general_clusters_scatter is not None:
-                self.general_clusters_scatter.remove()
-                self.general_clusters_scatter = None
-            self.update_plot()
-            return
-
-        general_points = data.reshape(-1, 2)
-        if self.general_clusters_scatter is None:
-            self.general_clusters_scatter = self.ax.scatter(
-                general_points[:, 0], general_points[:, 1],
-                c='blue', s=20, alpha=0.7, marker='o', label='Clusters Generales'
-            )
-        else:
-            self.general_clusters_scatter.set_offsets(general_points)
-
-        self.update_plot()
-
-    def visualize_leg_clusters_callback(self, msg):
-        """Visualiza los clusters de piernas publicados como Float32MultiArray."""
-        data = np.array(msg.data)
-        if data.size == 0:
-            self.get_logger().info("No hay clusters de piernas para visualizar.")
-            if self.leg_clusters_scatter is not None:
-                self.leg_clusters_scatter.remove()
-                self.leg_clusters_scatter = None
-            self.update_plot()
-            return
-
-        points = data.reshape(-1, 2)
-        if self.leg_clusters_scatter is None:
-            self.leg_clusters_scatter = self.ax.scatter(
-                points[:, 0], points[:, 1],
-                c='red', s=20, alpha=0.9, marker='d', label='Clusters de Piernas'
-            )
-        else:
-            self.leg_clusters_scatter.set_offsets(points)
-
-        self.update_plot()
-
-    def visualize_person_position_callback(self, msg):
-        """Visualiza la posición esperada de la persona."""
-        person_position = np.array([msg.x, msg.y])
-
-        if self.person_position_scatter is None:
-            self.person_position_scatter = self.ax.scatter(
-                person_position[0], person_position[1],
-                c='green', s=50, alpha=0.9, marker='x', label='Posición Estimada de la Persona'
-            )
-        else:
-            self.person_position_scatter.set_offsets(person_position)
-
-        self.update_plot()
-
-    def update_plot(self):
-        """Actualiza la visualización en tiempo real."""
-        self.ax.set_xlabel("Coordenada X", fontsize=12)
-        self.ax.set_ylabel("Coordenada Y", fontsize=12)
-        self.ax.set_title("Visualización de Clusters y Trayectorias", fontsize=16)
-        self.ax.legend(loc='upper right', fontsize=10)
-        self.ax.grid(True, linestyle='--', alpha=0.7)
-        plt.draw()
-        plt.pause(0.001)
 
 def main(args=None):
     rclpy.init(args=args)
@@ -202,6 +116,8 @@ def main(args=None):
         node.get_logger().info("Nodo Interfaz de Usuario detenido manualmente.")
     finally:
         node.destroy_node()
+        rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

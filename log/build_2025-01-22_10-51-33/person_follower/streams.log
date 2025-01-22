@@ -1,0 +1,24 @@
+[0.746s] Invoking command in '/home/usuario/ros2_ws/src/build/person_follower': PYTHONPATH=/home/usuario/ros2_ws/src/build/person_follower/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/usuario/ros2_ws/src/install/person_follower/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/usuario/ros2_ws/src/build/person_follower/build --no-deps symlink_data
+[1.015s] /usr/lib/python3/dist-packages/setuptools/dist.py:723: UserWarning: Usage of dash-separated 'script-dir' will not be supported in future versions. Please use the underscore name 'script_dir' instead
+[1.015s]   warnings.warn(
+[1.038s] running develop
+[1.276s] running egg_info
+[1.276s] writing person_follower.egg-info/PKG-INFO
+[1.278s] writing dependency_links to person_follower.egg-info/dependency_links.txt
+[1.278s] writing entry points to person_follower.egg-info/entry_points.txt
+[1.279s] writing requirements to person_follower.egg-info/requires.txt
+[1.280s] writing top-level names to person_follower.egg-info/top_level.txt
+[1.282s] reading manifest file 'person_follower.egg-info/SOURCES.txt'
+[1.286s] writing manifest file 'person_follower.egg-info/SOURCES.txt'
+[1.312s] running build_ext
+[1.312s] Creating /home/usuario/ros2_ws/src/install/person_follower/lib/python3.10/site-packages/person-follower.egg-link (link to .)
+[1.323s] Installing camera_node script to /home/usuario/ros2_ws/src/install/person_follower/lib/person_follower
+[1.323s] Installing collision_handling_node script to /home/usuario/ros2_ws/src/install/person_follower/lib/person_follower
+[1.324s] Installing control_node script to /home/usuario/ros2_ws/src/install/person_follower/lib/person_follower
+[1.324s] Installing detection_node script to /home/usuario/ros2_ws/src/install/person_follower/lib/person_follower
+[1.324s] Installing tracking_node script to /home/usuario/ros2_ws/src/install/person_follower/lib/person_follower
+[1.325s] Installing user_interface_node script to /home/usuario/ros2_ws/src/install/person_follower/lib/person_follower
+[1.327s] 
+[1.327s] Installed /home/usuario/ros2_ws/src/build/person_follower
+[1.328s] running symlink_data
+[1.352s] Invoked command in '/home/usuario/ros2_ws/src/build/person_follower' returned '0': PYTHONPATH=/home/usuario/ros2_ws/src/build/person_follower/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/usuario/ros2_ws/src/install/person_follower/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/usuario/ros2_ws/src/build/person_follower/build --no-deps symlink_data

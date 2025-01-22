@@ -64,8 +64,8 @@ def generate_launch_description():
         ),
         Node(
             package='person_follower',
-            executable='slam_node',
-            name='slam_node',
+            executable='SLAM_node',
+            name='SLAM_node',
             output='screen',
             parameters=[config_path]
         )

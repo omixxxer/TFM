@@ -1,0 +1,35 @@
+running develop
+running egg_info
+creating person_follower.egg-info
+writing person_follower.egg-info/PKG-INFO
+writing dependency_links to person_follower.egg-info/dependency_links.txt
+writing entry points to person_follower.egg-info/entry_points.txt
+writing requirements to person_follower.egg-info/requires.txt
+writing top-level names to person_follower.egg-info/top_level.txt
+writing manifest file 'person_follower.egg-info/SOURCES.txt'
+reading manifest file 'person_follower.egg-info/SOURCES.txt'
+writing manifest file 'person_follower.egg-info/SOURCES.txt'
+running build_ext
+Creating /home/usuario/ros2_ws/src/install/person_follower/lib/python3.10/site-packages/person-follower.egg-link (link to .)
+Installing camera_node script to /home/usuario/ros2_ws/src/install/person_follower/lib/person_follower
+Installing collision_handling_node script to /home/usuario/ros2_ws/src/install/person_follower/lib/person_follower
+Installing control_node script to /home/usuario/ros2_ws/src/install/person_follower/lib/person_follower
+Installing detection_node script to /home/usuario/ros2_ws/src/install/person_follower/lib/person_follower
+Installing tracking_node script to /home/usuario/ros2_ws/src/install/person_follower/lib/person_follower
+Installing user_interface_node script to /home/usuario/ros2_ws/src/install/person_follower/lib/person_follower
+
+Installed /home/usuario/ros2_ws/src/build/person_follower
+running symlink_data
+creating /home/usuario/ros2_ws/src/install/person_follower/share/ament_index
+creating /home/usuario/ros2_ws/src/install/person_follower/share/ament_index/resource_index
+creating /home/usuario/ros2_ws/src/install/person_follower/share/ament_index/resource_index/packages
+symbolically linking /home/usuario/ros2_ws/src/build/person_follower/resource/person_follower -> /home/usuario/ros2_ws/src/install/person_follower/share/ament_index/resource_index/packages
+symbolically linking /home/usuario/ros2_ws/src/build/person_follower/package.xml -> /home/usuario/ros2_ws/src/install/person_follower/share/person_follower
+creating /home/usuario/ros2_ws/src/install/person_follower/share/person_follower/launch
+symbolically linking /home/usuario/ros2_ws/src/build/person_follower/person_follower/launch/start_person_follower.launch.py -> /home/usuario/ros2_ws/src/install/person_follower/share/person_follower/launch
+creating /home/usuario/ros2_ws/src/install/person_follower/share/person_follower/model
+symbolically linking /home/usuario/ros2_ws/src/build/person_follower/person_follower/model/yolov4-tiny.cfg -> /home/usuario/ros2_ws/src/install/person_follower/share/person_follower/model
+symbolically linking /home/usuario/ros2_ws/src/build/person_follower/person_follower/model/yolov4-tiny.weights -> /home/usuario/ros2_ws/src/install/person_follower/share/person_follower/model
+symbolically linking /home/usuario/ros2_ws/src/build/person_follower/person_follower/model/coco.names -> /home/usuario/ros2_ws/src/install/person_follower/share/person_follower/model
+creating /home/usuario/ros2_ws/src/install/person_follower/share/person_follower/config
+symbolically linking /home/usuario/ros2_ws/src/build/person_follower/person_follower/config/config.yaml -> /home/usuario/ros2_ws/src/install/person_follower/share/person_follower/config

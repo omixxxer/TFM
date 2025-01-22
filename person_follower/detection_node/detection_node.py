@@ -53,6 +53,7 @@ class DetectionNode(Node):
         self.leg_cluster_publisher = self.create_publisher(Float32MultiArray, '/clusters/legs', 10)
         self.person_position_publisher = self.create_publisher(Point, '/person_position', 10)
 
+
         self.log_info("Nodo iniciado", {"status": "enabled"})
         self.publish_status("Nodo de Detección iniciado.")
         

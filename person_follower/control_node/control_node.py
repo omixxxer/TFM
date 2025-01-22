@@ -63,7 +63,12 @@ class ControlNode(Node):
     def map_callback(self, msg):
         """Callback para manejar el mapa recibido del nodo SLAM."""
         self.get_logger().info("Mapa recibido del nodo SLAM.")
-        # Puedes añadir lógica aquí para validar el contenido del mapa
+        # Validar el contenido del mapa antes de proceder
+        if not msg.data:
+            self.get_logger().warn("Mapa recibido vacío. Esperando un mapa válido.")
+            self.transition_to('IDLE')
+        else:
+            self.get_logger().info("Mapa válido recibido.")
 
     def stop_robot(self):
         """Detiene el robot publicando un mensaje de velocidad cero."""
@@ -96,11 +101,11 @@ class ControlNode(Node):
 
     def start_tracking(self):
         """Acciones para iniciar el seguimiento."""
-        if self.tracking_service_ready:
+        if self.tracking_service_ready and self.person_detected:
             self.toggle_tracking(True)
             self.get_logger().info("Iniciando seguimiento...")
         else:
-            self.get_logger().error("El servicio de seguimiento no está listo. Volviendo a IDLE.")
+            self.get_logger().error("Seguimiento no iniciado. Verifica que el servicio esté listo y haya una detección válida.")
             self.transition_to('IDLE')
 
     def notify_shutdown(self):

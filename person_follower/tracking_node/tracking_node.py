@@ -18,6 +18,9 @@ class TrackingNode(Node):
         self.tracking_enabled = False
         self.last_obstacle_state = None  # Estado previo del obstáculo
 
+        # Inicializar lógica de cierre
+        self.initialize_shutdown_listener()
+
         # Inicialización del filtro de Kalman
         self.kalman_state = np.zeros(4)  # [x, y, vx, vy]
         self.kalman_covariance = np.eye(4) * 0.1
@@ -41,7 +44,6 @@ class TrackingNode(Node):
         self.person_position_subscription = self.create_subscription(Point, '/person_position', self.person_position_callback, 10)
         self.person_detected_subscription = self.create_subscription(Bool, '/person_detected', self.detection_callback, 10)
         self.scan_subscription = self.create_subscription(LaserScan, '/scan', self.listener_callback, 10)
-        self.shutdown_subscription = self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
         self.map_subscription = self.create_subscription(OccupancyGrid, '/map', self.map_callback, 10)
 
         self.status_publisher = self.create_publisher(String, '/tracking/status', 10)
@@ -197,6 +199,11 @@ class TrackingNode(Node):
 
     def publish_status(self, message):
         self.status_publisher.publish(String(data=message))
+
+    def initialize_shutdown_listener(self):
+        """Inicializa el suscriptor para manejar el cierre del sistema."""
+        self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
+        self.shutdown_confirmation_publisher = self.create_publisher(Bool, '/shutdown_confirmation', 10)
 
     def shutdown_callback(self, msg):
         """Callback para manejar la notificación de cierre del sistema."""

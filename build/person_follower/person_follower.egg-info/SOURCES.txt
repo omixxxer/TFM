@@ -1,0 +1,17 @@
+package.xml
+setup.cfg
+setup.py
+person_follower/__init__.py
+person_follower.egg-info/PKG-INFO
+person_follower.egg-info/SOURCES.txt
+person_follower.egg-info/dependency_links.txt
+person_follower.egg-info/entry_points.txt
+person_follower.egg-info/requires.txt
+person_follower.egg-info/top_level.txt
+person_follower.egg-info/zip-safe
+person_follower/config/config.yaml
+person_follower/launch/start_person_follower.launch.py
+person_follower/model/coco.names
+person_follower/model/yolov4-tiny.cfg
+person_follower/model/yolov4-tiny.weights
+resource/person_follower
