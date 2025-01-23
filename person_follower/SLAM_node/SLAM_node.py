@@ -14,6 +14,14 @@ class SLAMNode(Node):
     def __init__(self):
         super().__init__('SLAM_node')
 
+        # Declaración de parámetros ajustables para el nodo 
+        self.declare_parameter('enabled', True)
+        self.enabled = self.get_parameter('enabled').value
+
+        if not self.enabled:
+            self.get_logger().info("Nodo de SLAM desactivado.")
+            return
+
         # Inicializar lógica de cierre
         self.initialize_shutdown_listener()
 
@@ -39,6 +47,7 @@ class SLAMNode(Node):
 
         # Timer para publicar el mapa periódicamente
         self.create_timer(1.0, self.publish_map)
+
 
     def initialize_shutdown_listener(self):
         """Inicializa el suscriptor para manejar el cierre del sistema."""

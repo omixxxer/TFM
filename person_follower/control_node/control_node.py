@@ -9,12 +9,17 @@ class ControlNode(Node):
     def __init__(self):
         super().__init__('control_node')
 
-        # Declaración de parámetros con valores predeterminados
-        self.declare_parameter('tracking_enabled', True)
+        # Declaración de parámetros ajustables para el nodo 
+        self.declare_parameter('enabled', True)
+        self.enabled = self.get_parameter('enabled').value
+
+        if not self.enabled:
+            self.get_logger().info("Nodo de Control desactivado.")
+            return
+
         self.declare_parameter('slam_enabled', True)
 
         # Inicialización de parámetros
-        self.tracking_enabled = self.get_parameter('tracking_enabled').value
         self.slam_enabled = self.get_parameter('slam_enabled').value
 
         # Estados de la FSM
@@ -28,13 +33,13 @@ class ControlNode(Node):
         # Subscripciones
         self.create_subscription(Bool, '/person_detected', self.person_detected_callback, 10)
         self.create_subscription(Bool, '/shutdown_confirmation', self.shutdown_confirmation_callback, 10)
-        self.velocity_subscription = self.create_subscription(Twist, '/tracking/velocity_cmd', self.velocity_callback, 10)
-        if self.slam_enabled:
-            self.create_subscription(OccupancyGrid, '/map', self.map_callback, 10)
+        self.velocity_subscription = self.create_subscription(Twist,'/tracking/velocity_cmd',self.velocity_callback,10)
+
 
         # Publicador de cierre de nodos secundarios
         self.shutdown_publisher = self.create_publisher(Bool, '/system_shutdown', 10)
         self.cmd_vel_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
+
 
         # Cliente para activar/desactivar el seguimiento
         self.tracking_client = self.create_client(SetBool, 'enable_tracking')
@@ -60,16 +65,6 @@ class ControlNode(Node):
             # Si no está en TRACKING, detén el robot
             self.stop_robot()
 
-    def map_callback(self, msg):
-        """Callback para manejar el mapa recibido del nodo SLAM."""
-        self.get_logger().info("Mapa recibido del nodo SLAM.")
-        # Validar el contenido del mapa antes de proceder
-        if not msg.data:
-            self.get_logger().warn("Mapa recibido vacío. Esperando un mapa válido.")
-            self.transition_to('IDLE')
-        else:
-            self.get_logger().info("Mapa válido recibido.")
-
     def stop_robot(self):
         """Detiene el robot publicando un mensaje de velocidad cero."""
         stop_msg = Twist()
@@ -77,6 +72,8 @@ class ControlNode(Node):
         stop_msg.angular.z = 0.0
         self.cmd_vel_publisher.publish(stop_msg)
         self.get_logger().info("Robot detenido.")
+
+
 
     def transition_to(self, new_state):
         """Gestiona las transiciones de estado de la FSM."""
@@ -101,11 +98,11 @@ class ControlNode(Node):
 
     def start_tracking(self):
         """Acciones para iniciar el seguimiento."""
-        if self.tracking_service_ready and self.person_detected:
+        if self.tracking_service_ready:
             self.toggle_tracking(True)
             self.get_logger().info("Iniciando seguimiento...")
         else:
-            self.get_logger().error("Seguimiento no iniciado. Verifica que el servicio esté listo y haya una detección válida.")
+            self.get_logger().error("El servicio de seguimiento no está listo. Volviendo a IDLE.")
             self.transition_to('IDLE')
 
     def notify_shutdown(self):

@@ -11,22 +11,24 @@ class CameraNode(Node):
     def __init__(self):
         super().__init__('camera_node')
 
-        # Declarar parámetros necesarios
+
+        # Declaración de parámetros ajustables para el nodo 
         self.declare_parameter('enabled', True)
+        self.enabled = self.get_parameter('enabled').value
+
+        if not self.enabled:
+            self.get_logger().info("Nodo de Cámara desactivado.")
+            return
+
+        # Declarar parámetros necesarios
         self.declare_parameter('yolov4_weights_path', '')
         self.declare_parameter('yolov4_cfg_path', '')
         self.declare_parameter('coco_names_path', '')
 
         # Leer los valores de los parámetros
-        self.enabled = self.get_parameter('enabled').value
         weights_path = self.get_parameter('yolov4_weights_path').value
         cfg_path = self.get_parameter('yolov4_cfg_path').value
         names_path = self.get_parameter('coco_names_path').value
-
-        # Verificar si el nodo está habilitado
-        if not self.enabled:
-            self.get_logger().info("Nodo de Cámara desactivado.")
-            return
 
         # Validar que las rutas no estén vacías
         if not weights_path or not cfg_path or not names_path:
@@ -34,13 +36,14 @@ class CameraNode(Node):
             return
 
         # Inicializar suscriptor al topic de imágenes publicadas
-        self.bridge = CvBridge()
-        self.image_subscriber = self.create_subscription(
-            Image,
-            '/image_raw',  # Ajusta el topic si es necesario
-            self.process_image_callback,
-            10
-        )
+        if self.enabled:
+            self.bridge = CvBridge()
+            self.image_subscriber = self.create_subscription(
+                Image,
+                '/image_raw',  # Ajusta el topic si es necesario
+                self.process_image_callback,
+                10
+            )
 
         # Publicador de estado
         self.status_publisher = self.create_publisher(String, '/camera/status', 10)
@@ -54,25 +57,27 @@ class CameraNode(Node):
         self.last_processed_time = time.time()
         self.processing_interval = 0.5  # Procesar una imagen cada 0.5 segundos
 
-        # Inicializar YOLO
-        self.get_logger().info(f"Cargando modelo YOLO desde:\nPesos: {weights_path}\nConfig: {cfg_path}\nClases: {names_path}")
-        self.net = cv2.dnn.readNet(weights_path, cfg_path)
+        if self.enabled:
+            # Inicializar YOLO
+            self.get_logger().info(f"Cargando modelo YOLO desde:\nPesos: {weights_path}\nConfig: {cfg_path}\nClases: {names_path}")
+            self.net = cv2.dnn.readNet(weights_path, cfg_path)
+            
+            # Obtener nombres de las capas y manejar los índices de salida
+            self.layer_names = self.net.getLayerNames()
+            unconnected_out_layers = self.net.getUnconnectedOutLayers()
 
-        # Obtener nombres de las capas y manejar los índices de salida
-        self.layer_names = self.net.getLayerNames()
-        unconnected_out_layers = self.net.getUnconnectedOutLayers()
+            # Manejo del cambio en getUnconnectedOutLayers
+            if isinstance(unconnected_out_layers, np.ndarray):
+                self.output_layers = [self.layer_names[i - 1] for i in unconnected_out_layers.flatten()]
+            else:
+                self.output_layers = [self.layer_names[i[0] - 1] for i in unconnected_out_layers]
 
-        # Manejo del cambio en getUnconnectedOutLayers
-        if isinstance(unconnected_out_layers, np.ndarray):
-            self.output_layers = [self.layer_names[i - 1] for i in unconnected_out_layers.flatten()]
-        else:
-            self.output_layers = [self.layer_names[i[0] - 1] for i in unconnected_out_layers]
+            # Leer nombres de las clases
+            with open(names_path, "r") as f:
+                self.classes = [line.strip() for line in f.readlines()]
 
-        # Leer nombres de las clases
-        with open(names_path, "r") as f:
-            self.classes = [line.strip() for line in f.readlines()]
-
-        self.get_logger().info("Nodo de Cámara personalizado iniciado, procesando imágenes con YOLO.")
+            self.get_logger().info("Nodo de Cámara personalizado iniciado, procesando imágenes con YOLO.")
+        
 
     def process_image_callback(self, msg):
         """Callback para procesar las imágenes recibidas."""

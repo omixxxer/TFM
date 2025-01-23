@@ -40,8 +40,7 @@ class DetectionNode(Node):
         self.median_filter_window = self.get_parameter('median_filter_window').value
 
         if not self.enabled:
-            self.log_info("Nodo desactivado", {"status": "disabled"})
-            self.publish_status("Nodo de Detección desactivado.")
+            self.get_logger().info("Nodo de Detección desactivado.")
             return
 
         # Inicialización de suscriptores y publicadores
@@ -54,15 +53,13 @@ class DetectionNode(Node):
         self.person_position_publisher = self.create_publisher(Point, '/person_position', 10)
 
 
-        self.log_info("Nodo iniciado", {"status": "enabled"})
-        self.publish_status("Nodo de Detección iniciado.")
+        self.log_info("Nodo de Detección iniciado.")
         
         # Inicializar lógica de cierre
         self.initialize_shutdown_listener()
         
     
-    def publish_status(self, message):
-        self.status_publisher.publish(String(data=message))
+
 
     def log_info(self, message, data):
         """Método auxiliar para logging estructurado."""

@@ -11,6 +11,7 @@ class UserInterfaceNode(Node):
         # Verificar si el nodo está habilitado
         self.declare_parameter('enabled', True)
         self.enabled = self.get_parameter('enabled').value
+
         if not self.enabled:
             self.get_logger().info("Nodo de Interfaz de Usuario desactivado.")
             return
