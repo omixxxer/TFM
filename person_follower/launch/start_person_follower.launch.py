@@ -42,7 +42,6 @@ def generate_launch_description():
             name='camera_node',
             output='screen',
             parameters=[{
-                'enabled': True,
                 'yolov4_weights_path': yolov4_weights_path,
                 'yolov4_cfg_path': yolov4_cfg_path,
                 'coco_names_path': coco_names_path
