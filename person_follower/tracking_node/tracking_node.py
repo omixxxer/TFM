@@ -165,6 +165,9 @@ class TrackingNode(Node):
         self.velocity_publisher.publish(cmd_msg)
         self.get_logger().info("Robot detenido.")
 
+    def publish_status(self, message):
+        self.status_publisher.publish(String(data=message))
+
     def shutdown_callback(self, msg):
         """Callback para manejar la notificación de cierre del sistema."""
         if msg.data:
