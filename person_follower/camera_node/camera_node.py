@@ -169,7 +169,9 @@ class CameraNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
+
     node = CameraNode()
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

@@ -1,7 +1,8 @@
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import OccupancyGrid
-from geometry_msgs.msg import PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped, Point
+from visualization_msgs.msg import Marker  
 from tf2_ros import StaticTransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 from sensor_msgs.msg import LaserScan
@@ -37,9 +38,11 @@ class SLAMNode(Node):
         self.map_publisher = self.create_publisher(OccupancyGrid, '/map', 10)
         self.initial_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', 10)
         self.shutdown_subscription = self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
+        self.marker_publisher = self.create_publisher(Marker, '/person_marker', 10)     #Publicador del marker para situar a la persona en el mapa
 
-        # Suscripción al LIDAR
-        self.scan_subscription = self.create_subscription(LaserScan, '/scan', self.listener_callback, 10)
+        # Suscripciones 
+        self.scan_subscription = self.create_subscription(LaserScan, '/scan', self.listener_callback, 10)       #Suscripcion a los datos del lidar
+        self.person_position_subscription = self.create_subscription(Point, '/person_position', self.person_position_callback, 10)      #Suscripcion a la posicion de la persona detectada
 
         # Broadcaster para transformaciones estáticas
         self.tf_broadcaster = StaticTransformBroadcaster(self)
@@ -47,6 +50,9 @@ class SLAMNode(Node):
 
         # Timer para publicar el mapa periódicamente
         self.create_timer(1.0, self.publish_map)
+
+        # Lista para guardar las posiciones de las personas detectadas
+        self.person_positions = {}
 
 
     def initialize_shutdown_listener(self):
@@ -65,9 +71,28 @@ class SLAMNode(Node):
             finally:
                 self.destroy_node()
 
+    def person_position_callback(self, msg):
+        """Callback para recibir la posición de la persona detectada."""
+        person_id = int(msg.z)  # Usamos z como identificador único
+        #self.get_logger().info(f"Posición de la persona detectada: ({msg.x}, {msg.y}), ID: {person_id}")
+
+        # Convertir las coordenadas de la persona al sistema de coordenadas del mapa
+        map_x = int((msg.x - self.map_origin_x) / self.map_resolution)
+        map_y = int((msg.y - self.map_origin_y) / self.map_resolution)
+
+        # Verificar si la posición está dentro de los límites del mapa
+        if 0 <= map_x < self.map_width and 0 <= map_y < self.map_height:
+            self.map_data[map_y, map_x] = 100  # Marca la posición como ocupada
+
+            # Guardar la posición en el diccionario de personas
+            self.person_positions[person_id] = (msg.x, msg.y)
+
+            # Publicar un Marker para la persona detectada (círculo)
+            self.publish_person_marker(msg.x, msg.y)
+
     def listener_callback(self, msg):
         """Procesa los datos del LIDAR y actualiza el mapa ocupacional."""
-        self.get_logger().info("Recibiendo datos del LIDAR...")
+        #self.get_logger().info("Recibiendo datos del LIDAR...")
 
         # Limpia el mapa anterior
         self.map_data.fill(0)
@@ -91,11 +116,41 @@ class SLAMNode(Node):
             # Incrementar el ángulo en cada iteración
             angle += msg.angle_increment
 
-        self.get_logger().info("Actualización del mapa completada.")
+        #self.get_logger().info("Actualización del mapa completada.")
+    
+
+    def publish_person_marker(self, x, y):
+        """Publica un Marker (círculo) para la persona detectada."""
+        marker = Marker()
+        marker.header.frame_id = 'map'
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.id = 0  # El identificador del marcador puede variar si tienes múltiples personas
+        marker.type = Marker.SPHERE  # Usar un marcador de tipo esfera
+        marker.action = Marker.ADD
+
+        # Tamaño del círculo
+        marker.scale.x = 0.5  # Radio en el eje X
+        marker.scale.y = 0.5  # Radio en el eje Y
+        marker.scale.z = 0.1  # Puedes hacer que sea más plano si deseas
+
+        # Color del círculo
+        marker.color.r = 0.0  # Rojo
+        marker.color.g = 1.0  # Verde
+        marker.color.b = 1.0  # Azul
+        marker.color.a = 1.0  # Opacidad (1.0 es completamente visible)
+
+        # Posición del marcador (en el espacio del mapa)
+        marker.pose.position.x = x
+        marker.pose.position.y = y
+        marker.pose.position.z = 0.0  # Altura del marcador (puedes ajustarlo si es necesario)
+
+        # Publicar el marcador
+        self.marker_publisher.publish(marker)
+
 
     def publish_map(self):
         """Publica el mapa actualizado basado en los datos del LIDAR."""
-        self.get_logger().info(f"Publicando mapa con datos únicos: {np.unique(self.map_data)}")
+        self.get_logger().debug(f"Publicando mapa con datos únicos: {np.unique(self.map_data)}")
 
         map_msg = OccupancyGrid()
         map_msg.header.frame_id = 'map'
@@ -107,6 +162,7 @@ class SLAMNode(Node):
         map_msg.info.origin.position.y = self.map_origin_y
         map_msg.info.origin.position.z = 0.0
         map_msg.info.origin.orientation.w = 1.0
+
         # Aplanar el mapa y publicarlo
         map_msg.data = self.map_data.flatten().tolist()
         self.map_publisher.publish(map_msg)

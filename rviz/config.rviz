@@ -7,7 +7,6 @@ Panels:
         - /Global Options1
         - /Status1
         - /Camera1
-        - /Camera1/Status1
       Splitter Ratio: 0.5
     Tree Height: 549
   - Class: rviz_common/Selection
@@ -27,7 +26,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: LaserScan
+    SyncSource: ""
 Visualization Manager:
   Class: ""
   Displays:
@@ -157,12 +156,26 @@ Visualization Manager:
         Value: /image_raw
       Value: false
       Visibility:
+        "": true
         Grid: true
         LaserScan: true
         Map: true
         Odometry: true
         Value: true
       Zoom Factor: 1
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Marker
+      Namespaces:
+        "": true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /person_marker
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

@@ -11,8 +11,15 @@ class DetectionNode(Node):
     def __init__(self):
         super().__init__('detection_node')
         
-        # Declaración de parámetros ajustables para el nodo de detección
+        #Comprobación de nodo habilitado
         self.declare_parameter('enabled', True)
+        self.enabled = self.get_parameter('enabled').value
+
+        if not self.enabled:
+            self.get_logger().info("Nodo de Detección desactivado.")
+            return
+
+        # Declaración de parámetros ajustables para el nodo de detección
         self.declare_parameter('max_detection_distance', 5.0)
         self.declare_parameter('min_detection_distance', 0.1)
         self.declare_parameter('dbscan_eps', 0.1)
@@ -26,7 +33,6 @@ class DetectionNode(Node):
         self.declare_parameter('median_filter_window', 7)  # Nuevo parámetro para el filtro de mediana
 
         # Obtener valores de parámetros desde la configuración
-        self.enabled = self.get_parameter('enabled').value
         self.max_detection_distance = self.get_parameter('max_detection_distance').value
         self.min_detection_distance = self.get_parameter('min_detection_distance').value
         self.dbscan_eps = self.get_parameter('dbscan_eps').value
@@ -39,9 +45,6 @@ class DetectionNode(Node):
         self.max_leg_distance = self.get_parameter('max_leg_distance').value
         self.median_filter_window = self.get_parameter('median_filter_window').value
 
-        if not self.enabled:
-            self.get_logger().info("Nodo de Detección desactivado.")
-            return
 
         # Inicialización de suscriptores y publicadores
         self.status_publisher = self.create_publisher(String, '/detection/status', 10)
@@ -52,6 +55,8 @@ class DetectionNode(Node):
         self.leg_cluster_publisher = self.create_publisher(Float32MultiArray, '/clusters/legs', 10)
         self.person_position_publisher = self.create_publisher(Point, '/person_position', 10)
 
+        # Variable para asignar IDs a las personas detectadas
+        self.person_id_counter = 0
 
         self.publish_status("Nodo de Detección iniciado.")
         
@@ -76,12 +81,10 @@ class DetectionNode(Node):
         interpolated_ranges, interpolated_angles = self.interpolate_lidar_points(
             ranges_filtered, msg.angle_min, msg.angle_max, msg.angle_increment, factor=2
         )
-                
 
         # Detección de persona usando los datos interpolados
         person_detected = self.detect_person(interpolated_ranges, interpolated_angles[0], interpolated_angles[1] - interpolated_angles[0])
-        
-
+    
                 
         self.detection_publisher.publish(Bool(data=person_detected))
         if person_detected:
@@ -147,13 +150,13 @@ class DetectionNode(Node):
         all_clusters, leg_clusters = self.detect_leg_clusters(clusters)
         
         # Publicar clusters generales
-        self.publish_general_clusters(points, labels)
+        #self.publish_general_clusters(points, labels)
         
-        # Publicar clusters de piernas si existen
-        if leg_clusters:
-            leg_points = np.concatenate(leg_clusters)  # Unir todos los puntos de los clusters de piernas
-            leg_labels = [1] * len(leg_points)  # Etiquetar los puntos de piernas con una etiqueta fija
-            self.publish_leg_clusters(leg_points, leg_labels)  # Publicar clusters de piernas
+        # # Publicar clusters de piernas si existen
+        # if leg_clusters:
+        #     leg_points = np.concatenate(leg_clusters)  # Unir todos los puntos de los clusters de piernas
+        #     leg_labels = [1] * len(leg_points)  # Etiquetar los puntos de piernas con una etiqueta fija
+        #     self.publish_leg_clusters(leg_points, leg_labels)  # Publicar clusters de piernas
         
         return bool(leg_clusters)  # Devolver si se detectaron piernas
     
@@ -182,43 +185,42 @@ class DetectionNode(Node):
                             {"cluster_size": cluster_size, "radius": mean_radius, "aspect_ratio": aspect_ratio},
                         )
                         
-        # Log de cuántos clusters de piernas se han detectado                        
+        # Asignar un ID único a cada persona (cluster de piernas detectado)
         if len(leg_clusters) >= 2:
+            self.person_id_counter += 1  # Incrementa el contador de IDs para asignar un nuevo ID
+            person_id = self.person_id_counter  # Asignar un ID único
             position = np.mean(np.concatenate(leg_clusters), axis=0)  # Promedio de las piernas
-            person_position = Point(x=position[0], y=position[1], z=0.0)
+            person_position = Point(x=position[0], y=position[1], z=float(person_id))  # Asignamos el ID como el valor de z
             self.person_position_publisher.publish(person_position)
-            self.log_info("Posición de la persona publicada", {"x": position[0], "y": position[1]})
-            self.log_info("Piernas detectadas", {"legs_detected": len(leg_clusters)})
+            self.log_info(f"Posición de la persona {person_id} publicada", {"x": position[0], "y": position[1]})
         else:
             self.log_info("Piernas no detectadas", {"legs_detected": len(leg_clusters)})
             
         return all_clusters, leg_clusters 
     
-    def publish_general_clusters(self, points, labels):
-        """Publica los clusters generales detectados como Float32MultiArray."""
-        cluster_msg = Float32MultiArray()
+    # def publish_general_clusters(self, points, labels):
+    #     """Publica los clusters generales detectados como Float32MultiArray."""
+    #     cluster_msg = Float32MultiArray()
     
-        for label in set(labels):
-            if label == -1:  # Ignorar ruido
-                continue
-            cluster_points = points[labels == label]
-            for point in cluster_points:
-                cluster_msg.data.extend([point[0], point[1]])  # x, y de cada punto
+    #     for label in set(labels):
+    #         if label == -1:  # Ignorar ruido
+    #             continue
+    #         cluster_points = points[labels == label]
+    #         for point in cluster_points:
+    #             cluster_msg.data.extend([point[0], point[1]])  # x, y de cada punto
     
-        self.general_cluster_publisher.publish(cluster_msg)
-        self.get_logger().debug(f"Clusters generales publicados: {len(set(labels)) - (1 if -1 in labels else 0)}")
+    #     self.general_cluster_publisher.publish(cluster_msg)
+    #     self.get_logger().debug(f"Clusters generales publicados: {len(set(labels)) - (1 if -1 in labels else 0)}")
     
-    def publish_leg_clusters(self, points, labels):
-        """Publica los clusters de piernas detectados como Float32MultiArray."""
-        cluster_msg = Float32MultiArray()
+    # def publish_leg_clusters(self, points, labels):
+    #     """Publica los clusters de piernas detectados como Float32MultiArray."""
+    #     cluster_msg = Float32MultiArray()
     
-        for point in points:
-            cluster_msg.data.extend([point[0], point[1]])  # x, y de cada punto
+    #     for point in points:
+    #         cluster_msg.data.extend([point[0], point[1]])  # x, y de cada punto
     
-        self.leg_cluster_publisher.publish(cluster_msg)
-        self.get_logger().debug(f"Clusters de piernas publicados: {len(points)} puntos")
-
-
+    #     self.leg_cluster_publisher.publish(cluster_msg)
+    #     self.get_logger().debug(f"Clusters de piernas publicados: {len(points)} puntos")
 
 
 def main(args=None):
