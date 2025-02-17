@@ -19,6 +19,11 @@ def generate_launch_description():
     yolov4_cfg_path = os.path.join(model_path, 'yolov4-tiny.cfg')
     coco_names_path = os.path.join(model_path, 'coco.names')
 
+    # Rutas de ORB-SLAM3
+    orbslam_vocab_path = os.path.join(package_share_directory, 'ORB_SLAM3', 'Vocabulary', 'ORBvoc.txt')
+    orbslam_config_path = os.path.join(package_share_directory, 'ORB_SLAM3', 'config', 'camera_config.yaml')
+
+
     return LaunchDescription([
         Node(
             package='person_follower',
