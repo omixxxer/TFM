@@ -19,10 +19,6 @@ def generate_launch_description():
     yolov4_cfg_path = os.path.join(model_path, 'yolov4-tiny.cfg')
     coco_names_path = os.path.join(model_path, 'coco.names')
 
-    # Rutas de ORB-SLAM3
-    orbslam_vocab_path = os.path.join(package_share_directory, 'ORB_SLAM3', 'Vocabulary', 'ORBvoc.txt')
-    orbslam_config_path = os.path.join(package_share_directory, 'ORB_SLAM3', 'config', 'camera_config.yaml')
-
 
     return LaunchDescription([
         Node(
@@ -49,7 +45,9 @@ def generate_launch_description():
             parameters=[{
                 'yolov4_weights_path': yolov4_weights_path,
                 'yolov4_cfg_path': yolov4_cfg_path,
-                'coco_names_path': coco_names_path
+                'coco_names_path': coco_names_path, 
+                'orb_vocabulary_path': '~/ros2_ws/src/ORB_SLAM3/Vocabulary/ORBvoc.txt',
+                'orb_config_path': '~/ros2_ws/src/ORB_SLAM3/Examples/Monocular/TUM1.yaml'
             }]
         ),
         Node(
