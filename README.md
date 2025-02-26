@@ -8,10 +8,10 @@
 
 # Descargar el archivo de vocabulario
     cd ~/ros2_ws/src/ORB_SLAM3/Vocabulary
-    wget https://github.com/raulmur/ORB_SLAM2/raw/master/Vocabulary/ORBvoc.txt.tar.gz
+    wget https://github.com/UZ-SLAMLab/ORB_SLAM3/raw/master/Vocabulary/ORBvoc.txt.tar.gz
     tar -xvzf ORBvoc.txt.tar.gz
     rm ORBvoc.txt.tar.gz
-
+    
 # Compilar ORB-SLAM3
     cd ~/ros2_ws/src/ORB_SLAM3
     chmod +x build.sh
