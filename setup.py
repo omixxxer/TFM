@@ -17,22 +17,22 @@ os.makedirs(vocab_dir, exist_ok=True)
 
 # Descargar y extraer el archivo si no está presente
 if not os.path.exists(vocab_file):
-    print(f"📥 Descargando ORBvoc.txt.tar.gz desde {download_url}...")
+    print(f"Descargando ORBvoc.txt.tar.gz desde {download_url}...")
     urllib.request.urlretrieve(download_url, compressed_file)
-    print("✅ Descarga completada. Extrayendo archivo...")
+    print("Descarga completada. Extrayendo archivo...")
 
     # Extraer el archivo
     try:
         with tarfile.open(compressed_file, "r:gz") as tar:
             tar.extractall(path=vocab_dir)
-        print("✅ Extracción completada.")
+        print("Extracción completada.")
     except Exception as e:
-        print(f"❌ Error al extraer el archivo: {e}")
+        print(f"Error al extraer el archivo: {e}")
         exit(1)
 
     # Eliminar el archivo comprimido después de extraerlo
     os.remove(compressed_file)
-    print("🗑️ Archivo comprimido eliminado para ahorrar espacio.")
+    print("Archivo comprimido eliminado para ahorrar espacio.")
 
 setup(
     name=package_name,
