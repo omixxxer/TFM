@@ -58,6 +58,8 @@ class DetectionNode(Node):
         # Variable para asignar IDs a las personas detectadas
         self.person_id_counter = 0
 
+        self.last_seen_positions = {}
+
         self.publish_status("Nodo de Detección iniciado.")
         
         # Inicializar lógica de cierre
@@ -148,17 +150,14 @@ class DetectionNode(Node):
         
         # Detectar los clusters de piernas y obtener todos los clusters
         all_clusters, leg_clusters = self.detect_leg_clusters(clusters)
+         
+        if leg_clusters:
+            # Aquí se realiza la asociación
+            position = np.mean(np.concatenate(leg_clusters), axis=0)  # Posición promedio de las piernas detectadas
+            person_id = self.get_person_id(position)
+            self.publish_person_id(person_id, position)
         
-        # Publicar clusters generales
-        #self.publish_general_clusters(points, labels)
-        
-        # # Publicar clusters de piernas si existen
-        # if leg_clusters:
-        #     leg_points = np.concatenate(leg_clusters)  # Unir todos los puntos de los clusters de piernas
-        #     leg_labels = [1] * len(leg_points)  # Etiquetar los puntos de piernas con una etiqueta fija
-        #     self.publish_leg_clusters(leg_points, leg_labels)  # Publicar clusters de piernas
-        
-        return bool(leg_clusters)  # Devolver si se detectaron piernas
+        return bool(leg_clusters)
     
     def detect_leg_clusters(self, clusters):
         """Detecta los clusters de piernas y devuelve ambos: los clusters generales y los de piernas."""
@@ -198,30 +197,22 @@ class DetectionNode(Node):
             
         return all_clusters, leg_clusters 
     
-    # def publish_general_clusters(self, points, labels):
-    #     """Publica los clusters generales detectados como Float32MultiArray."""
-    #     cluster_msg = Float32MultiArray()
-    
-    #     for label in set(labels):
-    #         if label == -1:  # Ignorar ruido
-    #             continue
-    #         cluster_points = points[labels == label]
-    #         for point in cluster_points:
-    #             cluster_msg.data.extend([point[0], point[1]])  # x, y de cada punto
-    
-    #     self.general_cluster_publisher.publish(cluster_msg)
-    #     self.get_logger().debug(f"Clusters generales publicados: {len(set(labels)) - (1 if -1 in labels else 0)}")
-    
-    # def publish_leg_clusters(self, points, labels):
-    #     """Publica los clusters de piernas detectados como Float32MultiArray."""
-    #     cluster_msg = Float32MultiArray()
-    
-    #     for point in points:
-    #         cluster_msg.data.extend([point[0], point[1]])  # x, y de cada punto
-    
-    #     self.leg_cluster_publisher.publish(cluster_msg)
-    #     self.get_logger().debug(f"Clusters de piernas publicados: {len(points)} puntos")
+    def get_person_id(self, position):
+        """Obtiene el ID de la persona basándose en la posición"""
+        for person_id, last_position in self.last_seen_positions.items():
+            if np.linalg.norm(position - last_position) < 0.5:  # Si la nueva posición está cerca de la anterior
+                return person_id
+        # Si no se encuentra una coincidencia, se asigna un nuevo ID
+        person_id = self.person_id_counter
+        self.person_id_counter += 1
+        self.last_seen_positions[person_id] = position
+        return person_id
 
+    def publish_person_id(self, person_id, position):
+        """Publica el ID de la persona y su posición"""
+        person_position = Point(x=position[0], y=position[1], z=float(person_id))  # Convertir person_id a float
+        self.person_position_publisher.publish(person_position)
+        self.get_logger().info(f"Persona {person_id} en posición ({position[0]}, {position[1]})")
 
 def main(args=None):
     rclpy.init(args=args)

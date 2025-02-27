@@ -1,11 +1,13 @@
 import rclpy
+import numpy as np
+import math
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, Point
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool, String
 from std_srvs.srv import SetBool
-import numpy as np
-import math
+from nav_msgs.msg import OccupancyGrid  # Para suscripción al mapa de ocupación
+
 
 class TrackingNode(Node):
     def __init__(self):
@@ -43,6 +45,7 @@ class TrackingNode(Node):
         self.person_detected_subscription = self.create_subscription(Bool, '/person_detected', self.detection_callback, 10)
         self.scan_subscription = self.create_subscription(LaserScan, '/scan', self.listener_callback, 10)
         self.shutdown_subscription = self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
+        self.map_subscription = self.create_subscription(OccupancyGrid, '/map', self.map_callback, 10)  # Suscripción al mapa
 
         self.status_publisher = self.create_publisher(String, '/tracking/status', 10)
         self.velocity_publisher = self.create_publisher(Twist, '/tracking/velocity_cmd', 10)
@@ -52,7 +55,9 @@ class TrackingNode(Node):
         self.person_position = None  # Posición actual de la persona
         self.last_person_update_time = None  # Última vez que se actualizó la posición de la persona
         self.timeout_duration = 2.0  # Segundos antes de detener el robot si no hay actualizaciones
-        self.previous_vx = 0.0
+        self.previous_vx = 0.0 
+        self.map_data = None  # Mapa de ocupación (de SLAM)
+        self.last_map_data = None  # Inicializar el atributo last_map_data
 
         self.get_logger().info("Nodo de Seguimiento con Filtro de Kalman iniciado")
         #self.publish_status("Nodo de Seguimiento con Filtro de Kalman iniciado.")
@@ -92,18 +97,61 @@ class TrackingNode(Node):
 
         self.get_logger().info(f"Posición estimada (Kalman): x={self.person_position.x:.2f}, y={self.person_position.y:.2f}")
 
-    def avoid_obstacles(self, input_msg):
-        if not self.obstacle_avoidance_enabled:
-            return 0.0  # No ajustar si la evasión está deshabilitada
 
+    def map_callback(self, msg):
+        """Callback para recibir el mapa de ocupación generado por SLAM."""
+        # Convertir el mapa en un formato numpy
+        current_map_data = np.array(msg.data).reshape(msg.info.height, msg.info.width)
+
+        # Solo procesar si el mapa ha cambiado
+        if self.last_map_data is None or not np.array_equal(current_map_data, self.last_map_data):
+            self.map_data = current_map_data
+            self.get_logger().info("Mapa de ocupación recibido y procesado.")
+            self.last_map_data = current_map_data
+        else:
+            self.get_logger().info("Mapa recibido, pero no ha cambiado, por lo que no se procesará.")
+
+
+    def avoid_obstacles(self, input_msg):
+        """Evita los obstáculos utilizando el mapa de ocupación y datos del LIDAR."""
+        
+        if self.map_data is None:
+            return 0.0  # Si no hay mapa disponible, no hacer ajustes.
+        
+        # Comprobar el mapa en la posición actual del robot (en función de su ubicación)
+        robot_x = int(self.person_position.x / 0.05)  # Convertir a índice del mapa
+        robot_y = int(self.person_position.y / 0.05)  # Convertir a índice del mapa
+        
+        # Verificar si las celdas alrededor del robot están ocupadas (por ejemplo, en un radio de 1 metro)
+        occupied = False
+        for dx in range(-2, 3):  # Verifica 5 celdas en el eje x
+            for dy in range(-2, 3):  # Verifica 5 celdas en el eje y
+                check_x = robot_x + dx
+                check_y = robot_y + dy
+                if 0 <= check_x < self.map_data.shape[1] and 0 <= check_y < self.map_data.shape[0]:
+                    # Si la celda está ocupada (valor 100 en el mapa)
+                    if self.map_data[check_y, check_x] == 100:
+                        occupied = True
+                        break
+            if occupied:
+                break
+
+        # Si encontramos una celda ocupada alrededor del robot, evitamos la colisión ajustando el movimiento
+        if occupied:
+            self.get_logger().warn("Zona ocupada detectada cerca del robot. Ajustando movimiento.")
+            return 0.5  # Ajuste de trayectoria (girar o alejarse según sea necesario)
+
+        # Detectar obstáculos usando LIDAR
         closest_distance = min(input_msg.ranges)
         obstacle_angle_index = input_msg.ranges.index(closest_distance)
         angle_to_obstacle = input_msg.angle_min + obstacle_angle_index * input_msg.angle_increment
 
         if closest_distance < 0.4:  # Distancia mínima de seguridad
-            self.get_logger().warn(f"Obstáculo detectado a {closest_distance:.2f} m en ángulo {math.degrees(angle_to_obstacle):.2f}°")
-            return -0.3 * angle_to_obstacle  # Ajuste angular para esquivar
+            self.get_logger().warn(f"Obstáculo dinámico detectado a {closest_distance:.2f} m en ángulo {math.degrees(angle_to_obstacle):.2f}°")
+            return -0.3 * angle_to_obstacle  # Ajuste angular para esquivar el obstáculo dinámico
+
         return 0.0  # No se requiere ajuste si no hay obstáculo
+
 
     def listener_callback(self, input_msg):
         if not self.tracking_enabled or not self.person_detected or not self.person_position:

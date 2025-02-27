@@ -8,7 +8,7 @@ tracking_node:
 
 camera_node:
   ros__parameters:
-    enabled: True   # Controla si el camera_node está activo o no
+    enabled: False   # Controla si el camera_node está activo o no
 
 detection_node:
   ros__parameters:
