@@ -6,6 +6,8 @@ import numpy as np
 from sklearn.cluster import DBSCAN
 from std_msgs.msg import String
 from geometry_msgs.msg import Point
+import time
+
 
 class DetectionNode(Node):
     def __init__(self):
@@ -18,6 +20,16 @@ class DetectionNode(Node):
         if not self.enabled:
             self.get_logger().info("Nodo de Detección desactivado.")
             return
+
+        # Inicialización del filtro de Kalman
+        self.kalman_state = np.zeros(4)  # [x, y, vx, vy]
+        self.kalman_covariance = np.eye(4) * 0.1
+        self.kalman_F = np.eye(4)  # Matriz de transición de estado
+        self.kalman_H = np.array([[1, 0, 0, 0],
+                                   [0, 1, 0, 0]])  # Matriz de observación
+        self.kalman_R = np.eye(2) * 0.05  # Covarianza del ruido de observación
+        self.kalman_Q = np.eye(4) * 0.01  # Covarianza del ruido del proceso
+
 
         # Declaración de parámetros ajustables para el nodo de detección
         self.declare_parameter('max_detection_distance', 5.0)
@@ -60,6 +72,8 @@ class DetectionNode(Node):
 
         self.last_seen_positions = {}
 
+        self.cleanup_lost_people(max_inactive_time=10)
+
         self.publish_status("Nodo de Detección iniciado.")
         
         # Inicializar lógica de cierre
@@ -91,7 +105,9 @@ class DetectionNode(Node):
         self.detection_publisher.publish(Bool(data=person_detected))
         if person_detected:
             self.log_info("Persona detectada", {"detection": "successful"})
-            
+                    
+        # Limpieza de personas no activas
+        self.cleanup_lost_people(max_inactive_time=10)
     
     def initialize_shutdown_listener(self):
         """Inicializa el suscriptor para manejar el cierre del sistema."""
@@ -152,11 +168,17 @@ class DetectionNode(Node):
         all_clusters, leg_clusters = self.detect_leg_clusters(clusters)
          
         if leg_clusters:
-            # Aquí se realiza la asociación
-            position = np.mean(np.concatenate(leg_clusters), axis=0)  # Posición promedio de las piernas detectadas
+            # Asumiendo que la posición de las piernas se puede usar como estimación de la persona
+            position = np.mean(np.concatenate(leg_clusters), axis=0)
+
+            # Asignación de ID utilizando Kalman para suavizar la asignación de IDs
             person_id = self.get_person_id(position)
-            self.publish_person_id(person_id, position)
-        
+
+            # Publicar la posición con el ID
+            person_position = Point(x=position[0], y=position[1], z=float(person_id))
+            self.person_position_publisher.publish(person_position)
+            self.log_info(f"Posición de la persona {person_id} publicada", {"x": position[0], "y": position[1]})
+
         return bool(leg_clusters)
     
     def detect_leg_clusters(self, clusters):
@@ -198,15 +220,31 @@ class DetectionNode(Node):
         return all_clusters, leg_clusters 
     
     def get_person_id(self, position):
-        """Obtiene el ID de la persona basándose en la posición"""
-        for person_id, last_position in self.last_seen_positions.items():
-            if np.linalg.norm(position - last_position) < 0.5:  # Si la nueva posición está cerca de la anterior
+        """Obtiene el ID de la persona basándose en la posición y el tiempo"""
+        current_time = time.time()
+        for person_id, data in self.last_seen_positions.items():
+            last_position = data['position']
+            last_timestamp = data['timestamp']
+
+            # Compara la posición y también si ha pasado suficiente tiempo
+            if np.linalg.norm(position - last_position) < 0.4 and (current_time - last_timestamp) < 5:  # 5 segundos
                 return person_id
-        # Si no se encuentra una coincidencia, se asigna un nuevo ID
+
+        # Si no se encuentra una coincidencia, asigna un nuevo ID
         person_id = self.person_id_counter
         self.person_id_counter += 1
-        self.last_seen_positions[person_id] = position
+        self.last_seen_positions[person_id] = {'position': position, 'timestamp': current_time}
         return person_id
+    
+    def cleanup_lost_people(self, max_inactive_time=10):
+        """Elimina las personas que no han sido detectadas en el último 'max_inactive_time' segundos."""
+        current_time = time.time()
+        self.last_seen_positions = {
+            person_id: data
+            for person_id, data in self.last_seen_positions.items()
+            if current_time - data['timestamp'] < max_inactive_time
+        }
+
 
     def publish_person_id(self, person_id, position):
         """Publica el ID de la persona y su posición"""
