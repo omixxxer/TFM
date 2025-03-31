@@ -70,5 +70,12 @@ def generate_launch_description():
             name='SLAM_node',
             output='screen',
             parameters=[config_path]
+        ),
+        Node(
+            package='person_follower',
+            executable='openpose_node',
+            name='openpose_node',
+            output='screen',
+            parameters=[config_path]
         )
     ])

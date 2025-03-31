@@ -26,3 +26,7 @@ SLAM_node:
   ros__parameters:
     enabled: True  # Controla si el slam_node está activo o no
 
+openpose_node:
+  ros__parameters:
+    enabled: True
+
