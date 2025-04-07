@@ -62,16 +62,21 @@ class DetectionNode(Node):
         self.status_publisher = self.create_publisher(String, '/detection/status', 10)
         self.detection_publisher = self.create_publisher(Bool, '/person_detected', 10)
         self.scan_subscription = self.create_subscription(LaserScan, '/scan', self.lidar_callback, 10)
+        self.create_subscription(Bool, '/person_detected_visual', self.visual_detected_callback, 10)
         self.cluster_publisher = self.create_publisher(Float32MultiArray, '/detection/clusters', 10)
         self.general_cluster_publisher = self.create_publisher(Float32MultiArray, '/clusters/general', 10)
         self.leg_cluster_publisher = self.create_publisher(Float32MultiArray, '/clusters/legs', 10)
         self.person_position_publisher = self.create_publisher(Point, '/person_position', 10)
 
+        # Estado de la verificación visual
+        self.visual_detected = False
+        self.visual_detection_confirmed = False
+        self.visual_detection_timeout = 3.0  # segundos
+        self.last_visual_detected_time = self.get_clock().now()
+
         # Variable para asignar IDs a las personas detectadas
         self.person_id_counter = 0
-
         self.last_seen_positions = {}
-
         self.cleanup_lost_people(max_inactive_time=10)
 
         self.publish_status("Nodo de Detección iniciado.")
@@ -88,8 +93,6 @@ class DetectionNode(Node):
         self.get_logger().info(f"{message} | {data}")
 
     def lidar_callback(self, msg):
-        #self.log_info("Procesando datos LIDAR", {"ranges": len(msg.ranges)})
-        
         # Preprocesamiento de datos: aplicar filtro de mediana
         ranges_filtered = self.apply_median_filter(msg.ranges, self.median_filter_window)
 
@@ -98,14 +101,32 @@ class DetectionNode(Node):
             ranges_filtered, msg.angle_min, msg.angle_max, msg.angle_increment, factor=2
         )
 
-        # Detección de persona usando los datos interpolados
-        person_detected = self.detect_person(interpolated_ranges, interpolated_angles[0], interpolated_angles[1] - interpolated_angles[0])
-    
-                
-        self.detection_publisher.publish(Bool(data=person_detected))
-        if person_detected:
-            self.log_info("Persona detectada", {"detection": "successful"})
-                    
+        # Detección de persona con LIDAR
+        person_detected = self.detect_person(
+            interpolated_ranges,
+            interpolated_angles[0],
+            interpolated_angles[1] - interpolated_angles[0]
+        )
+
+        # Comprobación combinada con detección visual
+        if not self.visual_detection_confirmed:
+            # No se ha confirmado detección visual aún: bloquear salida
+            final_detection = False
+        else:
+            # Visual ya fue confirmada alguna vez
+            time_since_visual = (self.get_clock().now() - self.last_visual_detected_time).nanoseconds * 1e-9
+            visual_valid = self.visual_detected or (time_since_visual < self.visual_detection_timeout)
+            final_detection = person_detected or visual_valid
+
+        # Publicar resultado combinado
+        self.detection_publisher.publish(Bool(data=final_detection))
+
+        if final_detection:
+            self.log_info("Persona detectada (combinada)", {
+                "lidar_ok": person_detected,
+                "visual_ok": self.visual_detected
+            })
+
         # Limpieza de personas no activas
         self.cleanup_lost_people(max_inactive_time=10)
     
@@ -125,6 +146,11 @@ class DetectionNode(Node):
             finally:
                 self.destroy_node()   
     
+    def visual_detected_callback(self, msg):
+        self.visual_detected = msg.data
+        if msg.data:
+            self.visual_detection_confirmed = True
+            self.last_visual_detected_time = self.get_clock().now()
 
     def apply_median_filter(self, data, window_size):
         """Aplica un filtro de mediana a los datos LIDAR para reducir el ruido."""

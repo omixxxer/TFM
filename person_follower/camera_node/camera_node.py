@@ -13,7 +13,7 @@ class CameraNode(Node):
 
 
         # Declaración de parámetros ajustables para el nodo 
-        self.declare_parameter('enabled', True)
+        self.declare_parameter('enabled', False)
         self.enabled = self.get_parameter('enabled').value
 
         if not self.enabled:

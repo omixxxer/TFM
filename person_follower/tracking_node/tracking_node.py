@@ -174,7 +174,7 @@ class TrackingNode(Node):
         # Velocidad lineal
         max_speed = 0.8
         acceleration_limit = 0.01
-        smoothing_factor = 0.4
+        smoothing_factor = 0.6
         target_vx = min(max_speed, max(0.0, max_speed * (distance_to_person - 0.1) / 0.9)) if distance_to_person > 0.1 else 0.0
         filtered_vx = self.previous_vx * smoothing_factor + target_vx * (1 - smoothing_factor)
         vx = self.previous_vx + min(acceleration_limit, max(-acceleration_limit, filtered_vx - self.previous_vx))
@@ -182,7 +182,7 @@ class TrackingNode(Node):
 
         # Velocidad angular
         angle_difference = -angle_to_person
-        max_angular_velocity = 1.6
+        max_angular_velocity = 1.0
         wz = 2.0 * angle_difference + adjustment
         wz = max(-max_angular_velocity, min(max_angular_velocity, wz))
 

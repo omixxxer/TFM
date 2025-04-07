@@ -16,7 +16,7 @@ class OpenPoseNode(Node):
 
         # Parámetros de activación y visualización
         self.declare_parameter('enabled', True)
-        self.declare_parameter('visualize', False)
+        self.declare_parameter('visualize', True)
         self.enabled = self.get_parameter('enabled').value
         self.visualize = self.get_parameter('visualize').value
 
@@ -35,6 +35,7 @@ class OpenPoseNode(Node):
         self.keypoints_pub = self.create_publisher(Float32MultiArray, '/pose/keypoints', 10)
         self.status_pub = self.create_publisher(String, '/openpose/status', 10)
         self.shutdown_sub = self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
+        self.visual_detection_pub = self.create_publisher(Bool, '/person_detected_visual', 10)
         self.shutdown_confirmation_pub = self.create_publisher(Bool, '/shutdown_confirmation', 10)
 
         # Inicializar MediaPipe Pose
@@ -67,12 +68,22 @@ class OpenPoseNode(Node):
             annotated_image = frame.copy()
 
             if results.pose_landmarks:
+                valid_keypoints = 0
                 for landmark in results.pose_landmarks.landmark:
                     keypoints.data.extend([landmark.x, landmark.y, landmark.z, landmark.visibility])
-                
+                    if landmark.visibility > 0.5:
+                        valid_keypoints += 1
+
+                # Publicar keypoints
                 self.keypoints_pub.publish(keypoints)
                 self.get_logger().info("Keypoints publicados.")
 
+                # Publicar detección visual si hay suficientes keypoints visibles
+                person_detected = valid_keypoints >= 3
+                self.visual_detection_pub.publish(Bool(data=person_detected))
+                self.get_logger().info(f"Detección visual publicada: {'Sí' if person_detected else 'No'}")
+
+                # Visualización
                 if self.visualize:
                     self.mp_drawing.draw_landmarks(
                         annotated_image,
@@ -81,6 +92,9 @@ class OpenPoseNode(Node):
                         landmark_drawing_spec=self.mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2),
                         connection_drawing_spec=self.mp_drawing.DrawingSpec(color=(255, 0, 0), thickness=2)
                     )
+            else:
+                # Si no hay landmarks, publicamos False en detección visual
+                self.visual_detection_pub.publish(Bool(data=False))
 
             if self.visualize:
                 cv2.imshow("Imagen de entrada", frame)
@@ -89,6 +103,7 @@ class OpenPoseNode(Node):
 
         except Exception as e:
             self.get_logger().error(f"Error en procesamiento de imagen: {e}")
+
 
     def publish_status(self, message):
         self.status_pub.publish(String(data=message))
