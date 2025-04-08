@@ -12,7 +12,7 @@ import time
 
 class OpenPoseNode(Node):
     def __init__(self):
-        super().__init__('openpose_node')
+        super().__init__('camera_node')
 
         # Parámetros de activación y visualización
         self.declare_parameter('enabled', True)
@@ -21,10 +21,10 @@ class OpenPoseNode(Node):
         self.visualize = self.get_parameter('visualize').value
 
         if not self.enabled:
-            self.get_logger().info("Nodo OpenPose desactivado.")
+            self.get_logger().info("Nodo Cámara desactivado.")
             return
 
-        self.get_logger().info("Inicializando nodo OpenPose con MediaPipe...")
+        self.get_logger().info("Inicializando nodo Cámara con MediaPipe...")
 
         # Inicializar bridge y suscripción con cola mínima
         qos = QoSProfile(depth=1)
@@ -122,11 +122,11 @@ class OpenPoseNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = OpenPoseNode()
+    node = CameraNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info("Nodo OpenPose detenido manualmente.")
+        node.get_logger().info("Nodo Cámara detenido manualmente.")
     finally:
         cv2.destroyAllWindows()
         node.destroy_node()
