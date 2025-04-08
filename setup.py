@@ -30,7 +30,6 @@ setup(
             'tracking_node = person_follower.tracking_node.tracking_node:main',
             'collision_handling_node = person_follower.collision_handling_node.collision_handling_node:main',
             'user_interface_node = person_follower.user_interface_node.user_interface_node:main',
-            'openpose_node = person_follower.openpose_node.openpose_node:main',
             'SLAM_node = person_follower.SLAM_node.SLAM_node:main',
         ],
     },
