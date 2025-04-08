@@ -10,7 +10,7 @@ import numpy as np
 import time
 
 
-class OpenPoseNode(Node):
+class CameraNode(Node):
     def __init__(self):
         super().__init__('camera_node')
 
@@ -21,7 +21,7 @@ class OpenPoseNode(Node):
         self.visualize = self.get_parameter('visualize').value
 
         if not self.enabled:
-            self.get_logger().info("Nodo Cámara desactivado.")
+            self.get_logger().info("Nodo de Cámara desactivado.")
             return
 
         self.get_logger().info("Inicializando nodo Cámara con MediaPipe...")
@@ -33,7 +33,7 @@ class OpenPoseNode(Node):
 
         # Publicadores
         self.keypoints_pub = self.create_publisher(Float32MultiArray, '/pose/keypoints', 10)
-        self.status_pub = self.create_publisher(String, '/openpose/status', 10)
+        self.status_pub = self.create_publisher(String, '/camera/status', 10)
         self.shutdown_sub = self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
         self.visual_detection_pub = self.create_publisher(Bool, '/person_detected_visual', 10)
         self.shutdown_confirmation_pub = self.create_publisher(Bool, '/shutdown_confirmation', 10)
@@ -97,7 +97,6 @@ class OpenPoseNode(Node):
                 self.visual_detection_pub.publish(Bool(data=False))
 
             if self.visualize:
-                cv2.imshow("Imagen de entrada", frame)
                 cv2.imshow("Salida con pose estimada", annotated_image)
                 cv2.waitKey(1)
 
