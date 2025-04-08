@@ -50,7 +50,7 @@ class CameraNode(Node):
         self.processing_interval = 0.3  # segundos
         self.last_processed_time = time.time()
 
-        self.publish_status("Nodo OpenPose con MediaPipe iniciado.")
+        self.publish_status("Nodo Camara con MediaPipe iniciado.")
 
     def image_callback(self, msg):
         current_time = time.time()
