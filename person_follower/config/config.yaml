@@ -8,7 +8,7 @@ tracking_node:
 
 camera_node:
   ros__parameters:
-    enabled: False   # Controla si el camera_node está activo o no
+    enabled: True   # Controla si el camera_node está activo o no
 
 detection_node:
   ros__parameters:
@@ -25,8 +25,3 @@ user_interface_node:
 SLAM_node:
   ros__parameters:
     enabled: True  # Controla si el slam_node está activo o no
-
-openpose_node:
-  ros__parameters:
-    enabled: True
-
