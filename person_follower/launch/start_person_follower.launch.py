@@ -15,9 +15,9 @@ def generate_launch_description():
 
     # Rutas de los modelos YOLO
     model_path = os.path.join(package_share_directory, 'model')
-    yolov4_weights_path = os.path.join(model_path, 'yolov4-tiny.weights')
-    yolov4_cfg_path = os.path.join(model_path, 'yolov4-tiny.cfg')
-    coco_names_path = os.path.join(model_path, 'coco.names')
+    #yolov4_weights_path = os.path.join(model_path, 'yolov4-tiny.weights')
+    #yolov4_cfg_path = os.path.join(model_path, 'yolov4-tiny.cfg')
+    #coco_names_path = os.path.join(model_path, 'coco.names')
 
 
     return LaunchDescription([
@@ -45,9 +45,7 @@ def generate_launch_description():
             parameters=[{
                 'yolov4_weights_path': yolov4_weights_path,
                 'yolov4_cfg_path': yolov4_cfg_path,
-                'coco_names_path': coco_names_path, 
-                'orb_vocabulary_path': '~/ros2_ws/src/ORB_SLAM3/Vocabulary/ORBvoc.txt',
-                'orb_config_path': '~/ros2_ws/src/ORB_SLAM3/Examples/Monocular/TUM1.yaml'
+                'coco_names_path': coco_names_path
             }]
         ),
         Node(
