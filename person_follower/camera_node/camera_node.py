@@ -1,184 +1,137 @@
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile
 from sensor_msgs.msg import Image
-import cv2
+from std_msgs.msg import Float32MultiArray, String, Bool
 from cv_bridge import CvBridge
-from std_msgs.msg import String, Bool
-import time
+import cv2
+import mediapipe as mp
 import numpy as np
+import time
 
-class CameraNode(Node):
+
+class OpenPoseNode(Node):
     def __init__(self):
-        super().__init__('camera_node')
+        super().__init__('openpose_node')
 
-
-        # Declaración de parámetros ajustables para el nodo 
-        self.declare_parameter('enabled', False)
+        # Parámetros de activación y visualización
+        self.declare_parameter('enabled', True)
+        self.declare_parameter('visualize', True)
         self.enabled = self.get_parameter('enabled').value
+        self.visualize = self.get_parameter('visualize').value
 
         if not self.enabled:
-            self.get_logger().info("Nodo de Cámara desactivado.")
+            self.get_logger().info("Nodo OpenPose desactivado.")
             return
 
-        # Declarar parámetros necesarios
-        self.declare_parameter('yolov4_weights_path', '')
-        self.declare_parameter('yolov4_cfg_path', '')
-        self.declare_parameter('coco_names_path', '')
+        self.get_logger().info("Inicializando nodo OpenPose con MediaPipe...")
 
-        # Leer los valores de los parámetros
-        weights_path = self.get_parameter('yolov4_weights_path').value
-        cfg_path = self.get_parameter('yolov4_cfg_path').value
-        names_path = self.get_parameter('coco_names_path').value
+        # Inicializar bridge y suscripción con cola mínima
+        qos = QoSProfile(depth=1)
+        self.bridge = CvBridge()
+        self.image_sub = self.create_subscription(Image, '/image_raw', self.image_callback, qos)
 
-        # Validar que las rutas no estén vacías
-        if not weights_path or not cfg_path or not names_path:
-            self.get_logger().error("Rutas de YOLO no proporcionadas. Revisa el archivo de lanzamiento.")
-            return
+        # Publicadores
+        self.keypoints_pub = self.create_publisher(Float32MultiArray, '/pose/keypoints', 10)
+        self.status_pub = self.create_publisher(String, '/openpose/status', 10)
+        self.shutdown_sub = self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
+        self.visual_detection_pub = self.create_publisher(Bool, '/person_detected_visual', 10)
+        self.shutdown_confirmation_pub = self.create_publisher(Bool, '/shutdown_confirmation', 10)
 
-        # Inicializar suscriptor al topic de imágenes publicadas
-        if self.enabled:
-            self.bridge = CvBridge()
-            self.image_subscriber = self.create_subscription(
-                Image,
-                '/image_raw',  # Ajusta el topic si es necesario
-                self.process_image_callback,
-                10
-            )
+        # Inicializar MediaPipe Pose
+        self.mp_pose = mp.solutions.pose
+        self.mp_drawing = mp.solutions.drawing_utils
+        self.pose = self.mp_pose.Pose(static_image_mode=False,
+                                      model_complexity=1,
+                                      enable_segmentation=False,
+                                      min_detection_confidence=0.5,
+                                      min_tracking_confidence=0.5)
 
-        # Publicador de estado
-        self.status_publisher = self.create_publisher(String, '/camera/status', 10)
-
-        self.shutdown_subscription = self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
-
-        # Inicializar lógica de cierre
-        self.initialize_shutdown_listener()
-
-        # Control de frecuencia
+        self.processing_interval = 0.3  # segundos
         self.last_processed_time = time.time()
-        self.processing_interval = 0.5  # Procesar una imagen cada 0.5 segundos
 
-        if self.enabled:
-            # Inicializar YOLO
-            self.get_logger().info(f"Cargando modelo YOLO desde:\nPesos: {weights_path}\nConfig: {cfg_path}\nClases: {names_path}")
-            self.net = cv2.dnn.readNet(weights_path, cfg_path)
-            
-            # Obtener nombres de las capas y manejar los índices de salida
-            self.layer_names = self.net.getLayerNames()
-            unconnected_out_layers = self.net.getUnconnectedOutLayers()
+        self.publish_status("Nodo OpenPose con MediaPipe iniciado.")
 
-            # Manejo del cambio en getUnconnectedOutLayers
-            if isinstance(unconnected_out_layers, np.ndarray):
-                self.output_layers = [self.layer_names[i - 1] for i in unconnected_out_layers.flatten()]
-            else:
-                self.output_layers = [self.layer_names[i[0] - 1] for i in unconnected_out_layers]
-
-            # Leer nombres de las clases
-            with open(names_path, "r") as f:
-                self.classes = [line.strip() for line in f.readlines()]
-
-            self.get_logger().info("Nodo de Cámara personalizado iniciado, procesando imágenes con YOLO.")
-        
-
-    def process_image_callback(self, msg):
-        """Callback para procesar las imágenes recibidas."""
+    def image_callback(self, msg):
         current_time = time.time()
         if current_time - self.last_processed_time < self.processing_interval:
-            return  # Saltar procesamiento si no ha pasado suficiente tiempo
-
+            return
         self.last_processed_time = current_time
+
         try:
-            self.get_logger().info("Imagen recibida. Iniciando procesamiento con YOLO...")
-
-            # Convertir mensaje ROS a imagen OpenCV
             frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-            self.get_logger().info("Imagen convertida a formato OpenCV.")
+            image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            # Procesar la imagen para detectar personas con YOLO
-            processed_frame = self.process_image(frame)
-            self.get_logger().info("Procesamiento de imagen completado.")
+            results = self.pose.process(image_rgb)
 
-            processed_frame_resized = cv2.resize(processed_frame, (1280, 720))    
+            keypoints = Float32MultiArray()
+            annotated_image = frame.copy()
 
-            # Mostrar la imagen procesada
-            cv2.namedWindow("Processed Image", cv2.WINDOW_NORMAL)
-            cv2.imshow("Processed Image", processed_frame_resized)
-            cv2.waitKey(1)
+            if results.pose_landmarks:
+                valid_keypoints = 0
+                for landmark in results.pose_landmarks.landmark:
+                    keypoints.data.extend([landmark.x, landmark.y, landmark.z, landmark.visibility])
+                    if landmark.visibility > 0.5:
+                        valid_keypoints += 1
+
+                # Publicar keypoints
+                self.keypoints_pub.publish(keypoints)
+                self.get_logger().info("Keypoints publicados.")
+
+                # Publicar detección visual si hay suficientes keypoints visibles
+                person_detected = valid_keypoints >= 3
+                self.visual_detection_pub.publish(Bool(data=person_detected))
+                self.get_logger().info(f"Detección visual publicada: {'Sí' if person_detected else 'No'}")
+
+                # Visualización
+                if self.visualize:
+                    self.mp_drawing.draw_landmarks(
+                        annotated_image,
+                        results.pose_landmarks,
+                        self.mp_pose.POSE_CONNECTIONS,
+                        landmark_drawing_spec=self.mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2),
+                        connection_drawing_spec=self.mp_drawing.DrawingSpec(color=(255, 0, 0), thickness=2)
+                    )
+            else:
+                # Si no hay landmarks, publicamos False en detección visual
+                self.visual_detection_pub.publish(Bool(data=False))
+
+            if self.visualize:
+                cv2.imshow("Imagen de entrada", frame)
+                cv2.imshow("Salida con pose estimada", annotated_image)
+                cv2.waitKey(1)
 
         except Exception as e:
-            self.get_logger().error(f"Error procesando la imagen: {e}")
+            self.get_logger().error(f"Error en procesamiento de imagen: {e}")
 
-    def process_image(self, frame):
-        """Realiza el procesamiento adicional de la imagen para detectar personas usando YOLO."""
-        # Preparar la imagen para YOLO
-        blob = cv2.dnn.blobFromImage(frame, 0.00392, (416, 416), (0, 0, 0), True, crop=False)
-        self.net.setInput(blob)
-        outs = self.net.forward(self.output_layers)
 
-        # Inicializar listas para los resultados de la detección
-        height, width, channels = frame.shape
-        boxes = []
-        confidences = []
-        class_ids = []
-
-        # Analizar las detecciones
-        for out in outs:
-            for detection in out:
-                scores = detection[5:]
-                class_id = np.argmax(scores)
-                confidence = scores[class_id]
-                if confidence > 0.5 and self.classes[class_id] == "person":
-                    # Obtener las coordenadas del cuadro delimitador
-                    center_x = int(detection[0] * width)
-                    center_y = int(detection[1] * height)
-                    w = int(detection[2] * width)
-                    h = int(detection[3] * height)
-                    x = int(center_x - w / 2)
-                    y = int(center_y - h / 2)
-
-                    boxes.append([x, y, w, h])
-                    confidences.append(float(confidence))
-                    class_ids.append(class_id)
-
-        # Aplicar supresión de no máximos para eliminar detecciones redundantes
-        indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
-        for i in range(len(boxes)):
-            if i in indexes:
-                x, y, w, h = boxes[i]
-                label = str(self.classes[class_ids[i]])
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                cv2.putText(frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-        return frame
-
-    def initialize_shutdown_listener(self):
-        """Inicializa el suscriptor para manejar el cierre del sistema."""
-        self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
-        self.shutdown_confirmation_publisher = self.create_publisher(Bool, '/shutdown_confirmation', 10)
+    def publish_status(self, message):
+        self.status_pub.publish(String(data=message))
 
     def shutdown_callback(self, msg):
-        """Callback para manejar la notificación de cierre del sistema."""
         if msg.data:
             self.get_logger().info("Cierre del sistema detectado. Enviando confirmación.")
             try:
-                self.shutdown_confirmation_publisher.publish(Bool(data=True))
+                self.shutdown_confirmation_pub.publish(Bool(data=True))
             except Exception as e:
                 self.get_logger().error(f"Error al publicar confirmación de apagado: {e}")
             finally:
+                cv2.destroyAllWindows()
                 self.destroy_node()
-                cv2.destroyAllWindows()  # Liberar ventanas de OpenCV al cerrar el nodo
+
 
 def main(args=None):
     rclpy.init(args=args)
-
-    node = CameraNode()
-
+    node = OpenPoseNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info("Nodo detenido manualmente.")
+        node.get_logger().info("Nodo OpenPose detenido manualmente.")
     finally:
-        node.destroy_node()
         cv2.destroyAllWindows()
+        node.destroy_node()
+        rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
