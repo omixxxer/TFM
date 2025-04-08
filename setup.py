@@ -12,7 +12,6 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('person_follower/launch/*.launch.py')),
-        (os.path.join('share', package_name, 'model'), glob('person_follower/model/*')),
         (os.path.join('share', package_name, 'config'), glob('person_follower/config/*.yaml')),  # Incluye la carpeta config
     ],
     install_requires=['setuptools'],
