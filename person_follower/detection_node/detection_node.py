@@ -169,52 +169,44 @@ class DetectionNode(Node):
         #self.log_info("Interpolación realizada", {"factor": factor})
         return interpolated_ranges, interpolated_angles
 
-    def detect_person(self, ranges, angle_min, angle_increment):
-        points = [
-            (r * np.cos(angle_min + i * angle_increment), r * np.sin(angle_min + i * angle_increment))
-            for i, r in enumerate(ranges)
-            if self.min_detection_distance < r < self.max_detection_distance
-        ]
-    
-        if not points:
-            self.log_info("No se detectaron puntos", {"status": "no_points"})
-            return False
-    
-        points = np.array(points)
-        clustering = DBSCAN(eps=self.dbscan_eps, min_samples=self.dbscan_min_samples).fit(points)
-        labels = clustering.labels_
-        num_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-    
-        #self.log_info("Clusters detectados", {"num_clusters": num_clusters})
-        
-        # Agrupa los puntos según las etiquetas de DBSCAN
-        clusters = [points[labels == label] for label in set(labels) if label != -1]
-        
-        # Detectar los clusters de piernas y obtener todos los clusters
-        all_clusters, leg_clusters = self.detect_leg_clusters(clusters)
-         
-        if leg_clusters:
-            # Asumiendo que la posición de las piernas se puede usar como estimación de la persona
-            position = np.mean(np.concatenate(leg_clusters), axis=0)
+	def detect_person(self, ranges, angle_min, angle_increment):
+	    points = [
+	        (r * np.cos(angle_min + i * angle_increment), r * np.sin(angle_min + i * angle_increment))
+	        for i, r in enumerate(ranges)
+	        if self.min_detection_distance < r < self.max_detection_distance
+	    ]
+	
+	    if not points:
+	        self.log_info("No se detectaron puntos", {"status": "no_points"})
+	        return False
+	
+	    points = np.array(points)
+	    clustering = DBSCAN(eps=self.dbscan_eps, min_samples=self.dbscan_min_samples).fit(points)
+	    labels = clustering.labels_
+	
+	    # Agrupa los puntos según las etiquetas de DBSCAN
+	    clusters = [points[labels == label] for label in set(labels) if label != -1]
+	
+	    # Detectar los clusters de piernas y obtener todos los clusters
+	    all_clusters, leg_clusters = self.detect_leg_clusters(clusters)
+	
+	    if leg_clusters:
+	        position = np.mean(np.concatenate(leg_clusters), axis=0)
+	        person_id = self.get_person_id(position)
+	        person_position = Point(x=position[0], y=position[1], z=float(person_id))
+	        self.person_position_publisher.publish(person_position)
+	        self.log_info(f"Posición de la persona {person_id} publicada", {"x": position[0], "y": position[1]})
+	
+	    return bool(leg_clusters)
 
-            # Asignación de ID utilizando Kalman para suavizar la asignación de IDs
-            person_id = self.get_person_id(position)
-
-            # Publicar la posición con el ID
-            person_position = Point(x=position[0], y=position[1], z=float(person_id))
-            self.person_position_publisher.publish(person_position)
-            self.log_info(f"Posición de la persona {person_id} publicada", {"x": position[0], "y": position[1]})
-
-        return bool(leg_clusters)
     
     def detect_leg_clusters(self, clusters):
         """Detecta los clusters de piernas y devuelve ambos: los clusters generales y los de piernas."""
         leg_clusters = []
-        all_clusters = []  # Para guardar todos los clusters procesados
-               
+        all_clusters = []
+    
         for cluster in clusters:
-            all_clusters.append(cluster)  # Añadir el cluster a la lista de todos los clusters
-            
+            all_clusters.append(cluster)
             cluster_size = len(cluster)
             if self.min_leg_cluster_size < cluster_size < self.max_leg_cluster_size:
                 x_min, y_min = np.min(cluster, axis=0)
@@ -231,19 +223,12 @@ class DetectionNode(Node):
                             "Cluster de pierna detectado",
                             {"cluster_size": cluster_size, "radius": mean_radius, "aspect_ratio": aspect_ratio},
                         )
-                        
-        # Asignar un ID único a cada persona (cluster de piernas detectado)
-        if len(leg_clusters) >= 2:
-            self.person_id_counter += 1  # Incrementa el contador de IDs para asignar un nuevo ID
-            person_id = self.person_id_counter  # Asignar un ID único
-            position = np.mean(np.concatenate(leg_clusters), axis=0)  # Promedio de las piernas
-            person_position = Point(x=position[0], y=position[1], z=float(person_id))  # Asignamos el ID como el valor de z
-            self.person_position_publisher.publish(person_position)
-            self.log_info(f"Posición de la persona {person_id} publicada", {"x": position[0], "y": position[1]})
-        else:
+    
+        if len(leg_clusters) < 2:
             self.log_info("Piernas no detectadas", {"legs_detected": len(leg_clusters)})
-            
-        return all_clusters, leg_clusters 
+    
+        return all_clusters, leg_clusters
+
     
     def get_person_id(self, position):
         """Obtiene el ID de la persona basándose en la posición y el tiempo"""
