@@ -28,18 +28,18 @@ class ControlNode(Node):
 
         # Estado del sistema
         self.person_detected = False
+        self.user_authorized = False
         self.tracking_service_ready = False
 
         # Subscripciones
         self.create_subscription(Bool, '/person_detected', self.person_detected_callback, 10)
         self.create_subscription(Bool, '/shutdown_confirmation', self.shutdown_confirmation_callback, 10)
         self.velocity_subscription = self.create_subscription(Twist,'/tracking/velocity_cmd',self.velocity_callback,10)
-
+        self.create_subscription(String, '/gesture_command', self.gesture_command_callback, 10)
 
         # Publicador de cierre de nodos secundarios
         self.shutdown_publisher = self.create_publisher(Bool, '/system_shutdown', 10)
         self.cmd_vel_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
-
 
         # Cliente para activar/desactivar el seguimiento
         self.tracking_client = self.create_client(SetBool, 'enable_tracking')
@@ -65,6 +65,20 @@ class ControlNode(Node):
             # Si no está en TRACKING, detén el robot
             self.stop_robot()
 
+    def gesture_command_callback(self, msg):
+        gesture = msg.data.lower().strip()
+        self.get_logger().info(f"Comando de gesto recibido: {gesture}")
+    
+        if gesture == "start_tracking":
+            self.user_authorized = True
+            if self.person_detected and self.current_state == 'IDLE':
+                self.transition_to('TRACKING')
+    
+        elif gesture == "stop_tracking":
+            self.user_authorized = False
+            if self.current_state == 'TRACKING':
+                self.transition_to('IDLE')
+
     def stop_robot(self):
         """Detiene el robot publicando un mensaje de velocidad cero."""
         stop_msg = Twist()
@@ -72,8 +86,6 @@ class ControlNode(Node):
         stop_msg.angular.z = 0.0
         self.cmd_vel_publisher.publish(stop_msg)
         self.get_logger().info("Robot detenido.")
-
-
 
     def transition_to(self, new_state):
         """Gestiona las transiciones de estado de la FSM."""
@@ -113,11 +125,14 @@ class ControlNode(Node):
 
     def person_detected_callback(self, msg):
         """Callback para manejar detección de personas."""
+        previous = self.person_detected
         self.person_detected = msg.data
-        if self.person_detected and self.current_state == 'IDLE':
-            self.transition_to('TRACKING')
-        elif not self.person_detected and self.current_state == 'TRACKING':
-            self.transition_to('IDLE')
+    
+        if self.user_authorized:
+            if self.person_detected and self.current_state == 'IDLE':
+                self.transition_to('TRACKING')
+            elif not self.person_detected and self.current_state == 'TRACKING':
+                self.transition_to('IDLE')
 
     def shutdown_confirmation_callback(self, msg):
         """Callback para manejar confirmación de cierre."""

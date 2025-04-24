@@ -21,16 +21,6 @@ class DetectionNode(Node):
             self.get_logger().info("Nodo de Detección desactivado.")
             return
 
-        # Inicialización del filtro de Kalman
-        self.kalman_state = np.zeros(4)  # [x, y, vx, vy]
-        self.kalman_covariance = np.eye(4) * 0.1
-        self.kalman_F = np.eye(4)  # Matriz de transición de estado
-        self.kalman_H = np.array([[1, 0, 0, 0],
-                                   [0, 1, 0, 0]])  # Matriz de observación
-        self.kalman_R = np.eye(2) * 0.05  # Covarianza del ruido de observación
-        self.kalman_Q = np.eye(4) * 0.01  # Covarianza del ruido del proceso
-
-
         # Declaración de parámetros ajustables para el nodo de detección
         self.declare_parameter('max_detection_distance', 5.0)
         self.declare_parameter('min_detection_distance', 0.1)
@@ -169,36 +159,39 @@ class DetectionNode(Node):
         #self.log_info("Interpolación realizada", {"factor": factor})
         return interpolated_ranges, interpolated_angles
 
-	def detect_person(self, ranges, angle_min, angle_increment):
-	    points = [
-	        (r * np.cos(angle_min + i * angle_increment), r * np.sin(angle_min + i * angle_increment))
-	        for i, r in enumerate(ranges)
-	        if self.min_detection_distance < r < self.max_detection_distance
-	    ]
-	
-	    if not points:
-	        self.log_info("No se detectaron puntos", {"status": "no_points"})
-	        return False
-	
-	    points = np.array(points)
-	    clustering = DBSCAN(eps=self.dbscan_eps, min_samples=self.dbscan_min_samples).fit(points)
-	    labels = clustering.labels_
-	
-	    # Agrupa los puntos según las etiquetas de DBSCAN
-	    clusters = [points[labels == label] for label in set(labels) if label != -1]
-	
-	    # Detectar los clusters de piernas y obtener todos los clusters
-	    all_clusters, leg_clusters = self.detect_leg_clusters(clusters)
-	
-	    if leg_clusters:
-	        position = np.mean(np.concatenate(leg_clusters), axis=0)
-	        person_id = self.get_person_id(position)
-	        person_position = Point(x=position[0], y=position[1], z=float(person_id))
-	        self.person_position_publisher.publish(person_position)
-	        self.log_info(f"Posición de la persona {person_id} publicada", {"x": position[0], "y": position[1]})
-	
-	    return bool(leg_clusters)
-
+    def detect_person(self, ranges, angle_min, angle_increment):
+        points = [
+            (r * np.cos(angle_min + i * angle_increment), r * np.sin(angle_min + i * angle_increment))
+            for i, r in enumerate(ranges)
+            if self.min_detection_distance < r < self.max_detection_distance
+        ]
+    
+        if not points:
+            self.log_info("No se detectaron puntos", {"status": "no_points"})
+            return False
+    
+        points = np.array(points)
+        clustering = DBSCAN(eps=self.dbscan_eps, min_samples=self.dbscan_min_samples).fit(points)
+        labels = clustering.labels_
+    
+        # Agrupa los puntos según las etiquetas de DBSCAN
+        clusters = [points[labels == label] for label in set(labels) if label != -1]
+    
+        # Detectar los clusters de piernas y obtener todos los clusters
+        all_clusters, leg_clusters = self.detect_leg_clusters(clusters)
+    
+        if leg_clusters:
+            position = np.mean(np.concatenate(leg_clusters), axis=0)
+            person_id = self.get_person_id(position)
+            person_position = Point(x=position[0], y=position[1], z=float(person_id))
+            self.person_position_publisher.publish(person_position)
+            self.log_info(
+                f"Posición de la persona {person_id} publicada",
+                {"x": position[0], "y": position[1]}
+            )
+    
+        return bool(leg_clusters)
+    
     
     def detect_leg_clusters(self, clusters):
         """Detecta los clusters de piernas y devuelve ambos: los clusters generales y los de piernas."""

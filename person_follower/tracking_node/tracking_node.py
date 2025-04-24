@@ -59,9 +59,8 @@ class TrackingNode(Node):
         self.map_data = None  # Mapa de ocupación (de SLAM)
         self.last_map_data = None  # Inicializar el atributo last_map_data
 
-        self.get_logger().info("Nodo de Seguimiento con Filtro de Kalman iniciado")
-        #self.publish_status("Nodo de Seguimiento con Filtro de Kalman iniciado.")
-
+        self.get_logger().info("Nodo de Seguimiento iniciado")
+        
     def enable_tracking_callback(self, request, response):
         self.tracking_enabled = request.data
         response.success = True
@@ -113,45 +112,17 @@ class TrackingNode(Node):
 
 
     def avoid_obstacles(self, input_msg):
-        """Evita los obstáculos utilizando el mapa de ocupación y datos del LIDAR."""
-        
-        if self.map_data is None:
-            return 0.0  # Si no hay mapa disponible, no hacer ajustes.
-        
-        # Comprobar el mapa en la posición actual del robot (en función de su ubicación)
-        robot_x = int(self.person_position.x / 0.05)  # Convertir a índice del mapa
-        robot_y = int(self.person_position.y / 0.05)  # Convertir a índice del mapa
-        
-        # Verificar si las celdas alrededor del robot están ocupadas (por ejemplo, en un radio de 1 metro)
-        occupied = False
-        for dx in range(-2, 3):  # Verifica 5 celdas en el eje x
-            for dy in range(-2, 3):  # Verifica 5 celdas en el eje y
-                check_x = robot_x + dx
-                check_y = robot_y + dy
-                if 0 <= check_x < self.map_data.shape[1] and 0 <= check_y < self.map_data.shape[0]:
-                    # Si la celda está ocupada (valor 100 en el mapa)
-                    if self.map_data[check_y, check_x] == 100:
-                        occupied = True
-                        break
-            if occupied:
-                break
+        if not self.obstacle_avoidance_enabled:
+            return 0.0  # No ajustar si la evasión está deshabilitada
 
-        # Si encontramos una celda ocupada alrededor del robot, evitamos la colisión ajustando el movimiento
-        if occupied:
-            self.get_logger().warn("Zona ocupada detectada cerca del robot. Ajustando movimiento.")
-            return 0.5  # Ajuste de trayectoria (girar o alejarse según sea necesario)
-
-        # Detectar obstáculos usando LIDAR
         closest_distance = min(input_msg.ranges)
         obstacle_angle_index = input_msg.ranges.index(closest_distance)
         angle_to_obstacle = input_msg.angle_min + obstacle_angle_index * input_msg.angle_increment
 
         if closest_distance < 0.4:  # Distancia mínima de seguridad
-            self.get_logger().warn(f"Obstáculo dinámico detectado a {closest_distance:.2f} m en ángulo {math.degrees(angle_to_obstacle):.2f}°")
-            return -0.3 * angle_to_obstacle  # Ajuste angular para esquivar el obstáculo dinámico
-
+            self.get_logger().warn(f"Obstáculo detectado a {closest_distance:.2f} m en ángulo {math.degrees(angle_to_obstacle):.2f}°")
+            return -0.3 * angle_to_obstacle  # Ajuste angular para esquivar
         return 0.0  # No se requiere ajuste si no hay obstáculo
-
 
     def listener_callback(self, input_msg):
         if not self.tracking_enabled or not self.person_detected or not self.person_position:
@@ -174,7 +145,7 @@ class TrackingNode(Node):
         # Velocidad lineal
         max_speed = 0.8
         acceleration_limit = 0.01
-        smoothing_factor = 0.6
+        smoothing_factor = 0.4
         target_vx = min(max_speed, max(0.0, max_speed * (distance_to_person - 0.1) / 0.9)) if distance_to_person > 0.1 else 0.0
         filtered_vx = self.previous_vx * smoothing_factor + target_vx * (1 - smoothing_factor)
         vx = self.previous_vx + min(acceleration_limit, max(-acceleration_limit, filtered_vx - self.previous_vx))
@@ -182,7 +153,7 @@ class TrackingNode(Node):
 
         # Velocidad angular
         angle_difference = -angle_to_person
-        max_angular_velocity = 1.0
+        max_angular_velocity = 1.6
         wz = 2.0 * angle_difference + adjustment
         wz = max(-max_angular_velocity, min(max_angular_velocity, wz))
 
@@ -196,22 +167,22 @@ class TrackingNode(Node):
         cmd_msg.angular.z = wz
         self.velocity_publisher.publish(cmd_msg)
 
-        # Publicar estado
-        if distance_to_person < 0.1:
-            self.publish_status("Detenido: demasiado cerca de la persona")
-        elif adjustment != 0.0:
-            self.publish_status("Esquivando obstáculo")
-        else:
-            self.publish_status("Siguiendo a la persona")
+        # # Publicar estado
+        # if distance_to_person < 0.1:
+        #     self.publish_status("Detenido: demasiado cerca de la persona")
+        # elif adjustment != 0.0:
+        #     self.publish_status("Esquivando obstáculo")
+        # else:
+        #     self.publish_status("Siguiendo a la persona")
 
-        self.get_logger().info(f"Distancia: {distance_to_person:.2f} m, Ángulo: {math.degrees(angle_to_person):.2f}°, Vel. Lineal: {vx:.2f}, Vel. Angular: {wz:.2f}")
+        # self.get_logger().info(f"Distancia: {distance_to_person:.2f} m, Ángulo: {math.degrees(angle_to_person):.2f}°, Vel. Lineal: {vx:.2f}, Vel. Angular: {wz:.2f}")
 
     def stop_robot(self):
         cmd_msg = Twist()
         cmd_msg.linear.x = 0.0
         cmd_msg.angular.z = 0.0
         self.velocity_publisher.publish(cmd_msg)
-        self.get_logger().info("Robot detenido.")
+        #self.get_logger().info("Robot detenido.")
 
     def publish_status(self, message):
         self.status_publisher.publish(String(data=message))
