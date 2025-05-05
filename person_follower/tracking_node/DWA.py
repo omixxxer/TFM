@@ -6,60 +6,11 @@ from geometry_msgs.msg import Twist, Point
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool, String
 from std_srvs.srv import SetBool
-from nav_msgs.msg import OccupancyGrid
-
-
-def simulate_trajectory(x, y, theta, v, w, dt=0.1, steps=10):
-    trajectory = []
-    for _ in range(steps):
-        x += v * math.cos(theta) * dt
-        y += v * math.sin(theta) * dt
-        theta += w * dt
-        trajectory.append((x, y))
-    return trajectory
-
-
-def evaluate_trajectory(trajectory, goal):
-    last_x, last_y = trajectory[-1]
-    goal_dist = math.hypot(goal[0] - last_x, goal[1] - last_y)
-    return -goal_dist
-
-
-def check_collision(trajectory, laser_ranges, angle_min, angle_increment, max_range=5.0, safety_radius=0.3):
-    obstacle_points = []
-    for i, r in enumerate(laser_ranges):
-        if 0.1 < r < max_range:
-            angle = angle_min + i * angle_increment
-            x = r * math.cos(angle)
-            y = r * math.sin(angle)
-            obstacle_points.append((x, y))
-
-    for px, py in trajectory:
-        for ox, oy in obstacle_points:
-            if math.hypot(px - ox, py - oy) < safety_radius:
-                return True
-    return False
-
-
-def compute_dwa_velocity(current_pose, goal, laser_scan):
-    x, y, theta = current_pose
-    best_score = -float('inf')
-    best_v, best_w = 0.0, 0.0
-
-    for v in np.arange(0.0, 0.8, 0.1):
-        for w in np.arange(-1.6, 1.6, 0.2):
-            traj = simulate_trajectory(x, y, theta, v, w)
-            if not check_collision(traj, laser_scan['ranges'], laser_scan['angle_min'], laser_scan['angle_increment']):
-                score = evaluate_trajectory(traj, goal)
-                if score > best_score:
-                    best_score = score
-                    best_v, best_w = v, w
-    return best_v, best_w
-
 
 class TrackingNode(Node):
     def __init__(self):
         super().__init__('tracking_node')
+
         self.declare_parameter('enabled', True)
         self.enabled = self.get_parameter('enabled').value
         if not self.enabled:
@@ -82,7 +33,6 @@ class TrackingNode(Node):
         self.person_detected_subscription = self.create_subscription(Bool, '/person_detected', self.detection_callback, 10)
         self.scan_subscription = self.create_subscription(LaserScan, '/scan', self.listener_callback, 10)
         self.shutdown_subscription = self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
-        self.map_subscription = self.create_subscription(OccupancyGrid, '/map', self.map_callback, 10)
 
         self.status_publisher = self.create_publisher(String, '/tracking/status', 10)
         self.velocity_publisher = self.create_publisher(Twist, '/tracking/velocity_cmd', 10)
@@ -92,10 +42,16 @@ class TrackingNode(Node):
         self.person_position = None
         self.last_person_update_time = None
         self.timeout_duration = 2.0
-        self.map_data = None
-        self.last_map_data = None
+        self.previous_vx = 0.0
 
-        self.get_logger().info("Nodo de Seguimiento iniciado")
+        self.max_speed = 0.8
+        self.min_speed = 0.0
+        self.max_yaw_rate = 1.6
+        self.max_accel = 0.2
+        self.dt = 0.1
+        self.predict_time = 1.0
+
+        self.get_logger().info("Nodo de Seguimiento con DWA iniciado")
 
     def enable_tracking_callback(self, request, response):
         self.tracking_enabled = request.data
@@ -117,18 +73,44 @@ class TrackingNode(Node):
         K = predicted_covariance @ self.kalman_H.T @ np.linalg.inv(S)
         self.kalman_state = predicted_state + K @ y
         self.kalman_covariance = (np.eye(4) - K @ self.kalman_H) @ predicted_covariance
-
         self.person_position = Point(x=self.kalman_state[0], y=self.kalman_state[1])
         self.last_person_update_time = self.get_clock().now()
         self.position_publisher.publish(self.person_position)
-        self.get_logger().info(f"Posición estimada (Kalman): x={self.person_position.x:.2f}, y={self.person_position.y:.2f}")
 
-    def map_callback(self, msg):
-        current_map_data = np.array(msg.data).reshape(msg.info.height, msg.info.width)
-        if self.last_map_data is None or not np.array_equal(current_map_data, self.last_map_data):
-            self.map_data = current_map_data
-            self.get_logger().info("Mapa de ocupación recibido y procesado.")
-            self.last_map_data = current_map_data
+    def calc_dynamic_window(self, vx):
+        return [
+            max(self.min_speed, vx - self.max_accel * self.dt),
+            min(self.max_speed, vx + self.max_accel * self.dt),
+            -self.max_yaw_rate,
+            self.max_yaw_rate
+        ]
+
+    def simulate_trajectory(self, vx, wz):
+        x, y, theta = 0.0, 0.0, 0.0
+        traj = []
+        for _ in range(int(self.predict_time / self.dt)):
+            x += vx * math.cos(theta) * self.dt
+            y += vx * math.sin(theta) * self.dt
+            theta += wz * self.dt
+            traj.append((x, y))
+        return traj
+
+    def get_obstacles(self, scan):
+        angle = scan.angle_min
+        obstacles = []
+        for r in scan.ranges:
+            if scan.range_min < r < scan.range_max:
+                x = r * math.cos(angle)
+                y = r * math.sin(angle)
+                obstacles.append((x, y))
+            angle += scan.angle_increment
+        return obstacles
+
+    def evaluate_trajectory(self, traj, goal, scan):
+        goal_dist = math.hypot(goal[0] - traj[-1][0], goal[1] - traj[-1][1])
+        obst_dists = [math.hypot(px - x, py - y) for (px, py) in traj for (x, y) in self.get_obstacles(scan)]
+        min_obst_dist = min(obst_dists) if obst_dists else 1.0
+        return -goal_dist + 0.8 * min_obst_dist
 
     def listener_callback(self, input_msg):
         if not self.tracking_enabled or not self.person_detected or not self.person_position:
@@ -140,19 +122,23 @@ class TrackingNode(Node):
             self.stop_robot()
             return
 
-        current_pose = (0.0, 0.0, 0.0)
+        dw = self.calc_dynamic_window(self.previous_vx)
+        best_score = -float('inf')
+        best_vx, best_wz = 0.0, 0.0
         goal = (self.person_position.x, self.person_position.y)
-        laser_scan = {
-            "ranges": input_msg.ranges,
-            "angle_min": input_msg.angle_min,
-            "angle_increment": input_msg.angle_increment
-        }
 
-        vx, wz = compute_dwa_velocity(current_pose, goal, laser_scan)
+        for vx in np.linspace(dw[0], dw[1], num=5):
+            for wz in np.linspace(dw[2], dw[3], num=5):
+                traj = self.simulate_trajectory(vx, wz)
+                score = self.evaluate_trajectory(traj, goal, input_msg)
+                if score > best_score:
+                    best_score = score
+                    best_vx, best_wz = vx, wz
 
+        self.previous_vx = best_vx
         cmd_msg = Twist()
-        cmd_msg.linear.x = vx
-        cmd_msg.angular.z = wz
+        cmd_msg.linear.x = best_vx
+        cmd_msg.angular.z = best_wz
         self.velocity_publisher.publish(cmd_msg)
 
     def stop_robot(self):
@@ -174,7 +160,6 @@ class TrackingNode(Node):
             finally:
                 self.destroy_node()
 
-
 def main(args=None):
     rclpy.init(args=args)
     node = TrackingNode()
@@ -184,7 +169,7 @@ def main(args=None):
         node.get_logger().info("Nodo de Seguimiento detenido manualmente.")
     finally:
         node.destroy_node()
-
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
