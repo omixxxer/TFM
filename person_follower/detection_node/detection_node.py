@@ -180,7 +180,7 @@ class DetectionNode(Node):
         # Detectar los clusters de piernas y obtener todos los clusters
         all_clusters, leg_clusters = self.detect_leg_clusters(clusters)
     
-        if leg_clusters:
+        if len(leg_clusters) >=2:
             position = np.mean(np.concatenate(leg_clusters), axis=0)
             person_id = self.get_person_id(position)
             person_position = Point(x=position[0], y=position[1], z=float(person_id))
@@ -216,10 +216,7 @@ class DetectionNode(Node):
                             "Cluster de pierna detectado",
                             {"cluster_size": cluster_size, "radius": mean_radius, "aspect_ratio": aspect_ratio},
                         )
-    
-        if len(leg_clusters) < 2:
-            self.log_info("Piernas no detectadas", {"legs_detected": len(leg_clusters)})
-    
+                    
         return all_clusters, leg_clusters
 
     
