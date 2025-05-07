@@ -153,25 +153,32 @@ class UserInterfaceNode(Node):
 
     def publish_system_status_text(self):
         text = (
-            f"Cámara: {self.camera_status}\n"
-            f"Detección: {self.detection_status}\n"
-            f"Seguimiento: {self.tracking_status}\n"
-            f"Persona detectada: {'Sí' if self.person_detected else 'No'}"
+            f"📷 Cámara: {self.camera_status}\n"
+            f"🔍 Detección: {self.detection_status}\n"
+            f"📡 Seguimiento: {self.tracking_status}\n"
+            f"👤 Persona: {'Sí' if self.person_detected else 'No'}"
         )
+    
         marker = Marker()
-        marker.header.frame_id = "base_footprint"
+        marker.header.frame_id = "odom"  # También puedes usar "map" si trabajas con localización
         marker.header.stamp = self.get_clock().now().to_msg()
         marker.ns = "system_status"
         marker.id = 2
         marker.type = Marker.TEXT_VIEW_FACING
         marker.action = Marker.ADD
-        marker.pose.position.z = 1.0
+    
+        # Posición fija en el espacio (esquina del entorno visible)
+        marker.pose.position.x = -2.0
+        marker.pose.position.y = 2.5
+        marker.pose.position.z = 1.5
         marker.pose.orientation.w = 1.0
-        marker.scale.z = 0.2
+    
+        marker.scale.z = 0.35
         marker.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=1.0)
         marker.text = text
-
+    
         self.marker_pub.publish(marker)
+
 
     def display_status(self):
         current_status = {
