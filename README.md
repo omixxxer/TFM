@@ -88,7 +88,7 @@ In an ssh terminal execute the commands:
 
     source /opt/ros/humble/setup.bash
     export ROS_DOMAIN_ID=24  # o 25, 26, 27
-    ros2 run usb_cam usb_cam_node_exe --ros-args -p image_width:=320 -p image_height:=240 -p framerate:=30.0
+    ros2 run usb_cam usb_cam_node_exe --ros-args -p image_width:=320 -p image_height:=240 -p framerate:=10.0
 
 
 Check  the /scan topic from a laptop terminal:
