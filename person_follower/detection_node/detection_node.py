@@ -180,11 +180,19 @@ class DetectionNode(Node):
         # Detectar los clusters de piernas y obtener todos los clusters
         all_clusters, leg_clusters = self.detect_leg_clusters(clusters)
     
+        # Publicar clusters generales
+        self.publish_general_clusters(points, labels)
+
         if len(leg_clusters) >=2:
             position = np.mean(np.concatenate(leg_clusters), axis=0)
             person_id = self.get_person_id(position)
             person_position = Point(x=position[0], y=position[1], z=float(person_id))
             self.person_position_publisher.publish(person_position)
+
+            # Publicar clusters de piernas
+            leg_points = np.concatenate(leg_clusters)
+            self.publish_leg_clusters(leg_points)
+
             self.log_info(
                 f"Posición de la persona {person_id} publicada",
                 {"x": position[0], "y": position[1]}
@@ -212,10 +220,10 @@ class DetectionNode(Node):
                     mean_radius = np.mean(distances)
                     if self.min_leg_radius < mean_radius < self.max_leg_radius:
                         leg_clusters.append(cluster)
-                        self.log_info(
-                            "Cluster de pierna detectado",
-                            {"cluster_size": cluster_size, "radius": mean_radius, "aspect_ratio": aspect_ratio},
-                        )
+                        # self.log_info(
+                            # "Cluster de pierna detectado",
+                            # {"cluster_size": cluster_size, "radius": mean_radius, "aspect_ratio": aspect_ratio},
+                        # )
                     
         return all_clusters, leg_clusters
 
@@ -237,6 +245,31 @@ class DetectionNode(Node):
         self.last_seen_positions[person_id] = {'position': position, 'timestamp': current_time}
         return person_id
     
+    def publish_general_clusters(self, points, labels):
+        """Publica los clusters generales detectados como Float32MultiArray."""
+        cluster_msg = Float32MultiArray()
+    
+        for label in set(labels):
+            if label == -1:  # Ignorar ruido
+                continue
+            cluster_points = points[labels == label]
+            for point in cluster_points:
+                cluster_msg.data.extend([point[0], point[1]])  # x, y de cada punto
+    
+        self.general_cluster_publisher.publish(cluster_msg)
+        #self.get_logger().debug(f"Clusters generales publicados: {len(set(labels)) - (1 if -1 in labels else 0)}")
+    
+
+    def publish_leg_clusters(self, points):
+        """Publica los clusters de piernas detectados como Float32MultiArray."""
+        cluster_msg = Float32MultiArray()
+    
+        for point in points:
+            cluster_msg.data.extend([point[0], point[1]])  # x, y de cada punto
+    
+        self.leg_cluster_publisher.publish(cluster_msg)
+        #self.get_logger().debug(f"Clusters de piernas publicados: {len(points)} puntos")
+
     def cleanup_lost_people(self, max_inactive_time=10):
         """Elimina las personas que no han sido detectadas en el último 'max_inactive_time' segundos."""
         current_time = time.time()
