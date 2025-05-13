@@ -6,6 +6,7 @@ from std_msgs.msg import Float32MultiArray, String, Bool
 from cv_bridge import CvBridge
 import cv2
 import mediapipe as mp
+from rclpy.qos import qos_profile_sensor_data
 import numpy as np
 import time
 
@@ -24,9 +25,8 @@ class CameraNode(Node):
 
         self.get_logger().info("Inicializando nodo de Cámara")
 
-        qos = QoSProfile(depth=1)
         self.bridge = CvBridge()
-        self.image_sub = self.create_subscription(Image, '/image_raw', self.image_callback, qos)
+        self.image_sub = self.create_subscription(Image, '/image_raw', self.image_callback, qos_profile_sensor_data)
 
         self.keypoints_pub = self.create_publisher(Float32MultiArray, '/pose/keypoints', 10)
         self.status_pub = self.create_publisher(String, '/camera/status', 10)
@@ -56,7 +56,7 @@ class CameraNode(Node):
 
         self.mp_drawing = mp.solutions.drawing_utils
 
-        self.processing_interval = 0.3
+        self.processing_interval = 1.0
         self.last_processed_time = time.time()
 
         self.publish_status("Nodo Cámara con MediaPipe iniciado.")

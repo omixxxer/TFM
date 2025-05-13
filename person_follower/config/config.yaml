@@ -24,4 +24,4 @@ user_interface_node:
 
 SLAM_node:
   ros__parameters:
-    enabled: True  # Controla si el slam_node está activo o no
+    enabled: False  # Controla si el slam_node está activo o no

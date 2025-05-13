@@ -6,8 +6,6 @@ from geometry_msgs.msg import Twist, Point
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool, String
 from std_srvs.srv import SetBool
-from nav_msgs.msg import OccupancyGrid  # Para suscripción al mapa de ocupación
-
 
 class TrackingNode(Node):
     def __init__(self):
@@ -45,7 +43,6 @@ class TrackingNode(Node):
         self.person_detected_subscription = self.create_subscription(Bool, '/person_detected', self.detection_callback, 10)
         self.scan_subscription = self.create_subscription(LaserScan, '/scan', self.listener_callback, 10)
         self.shutdown_subscription = self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
-        self.map_subscription = self.create_subscription(OccupancyGrid, '/map', self.map_callback, 10)  # Suscripción al mapa
 
         self.status_publisher = self.create_publisher(String, '/tracking/status', 10)
         self.velocity_publisher = self.create_publisher(Twist, '/tracking/velocity_cmd', 10)
@@ -56,8 +53,6 @@ class TrackingNode(Node):
         self.last_person_update_time = None  # Última vez que se actualizó la posición de la persona
         self.timeout_duration = 2.0  # Segundos antes de detener el robot si no hay actualizaciones
         self.previous_vx = 0.0 
-        self.map_data = None  # Mapa de ocupación (de SLAM)
-        self.last_map_data = None  # Inicializar el atributo last_map_data
 
         self.get_logger().info("Nodo de Seguimiento iniciado")
         
@@ -95,20 +90,6 @@ class TrackingNode(Node):
         self.position_publisher.publish(self.person_position)
 
         self.get_logger().info(f"Posición estimada (Kalman): x={self.person_position.x:.2f}, y={self.person_position.y:.2f}")
-
-
-    def map_callback(self, msg):
-        """Callback para recibir el mapa de ocupación generado por SLAM."""
-        # Convertir el mapa en un formato numpy
-        current_map_data = np.array(msg.data).reshape(msg.info.height, msg.info.width)
-
-        # Solo procesar si el mapa ha cambiado
-        if self.last_map_data is None or not np.array_equal(current_map_data, self.last_map_data):
-            self.map_data = current_map_data
-            self.get_logger().info("Mapa de ocupación recibido y procesado.")
-            self.last_map_data = current_map_data
-        else:
-            self.get_logger().info("Mapa recibido, pero no ha cambiado, por lo que no se procesará.")
 
 
     def avoid_obstacles(self, input_msg):
