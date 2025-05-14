@@ -5,6 +5,8 @@ from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker
 from std_msgs.msg import ColorRGBA
 import subprocess
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue  # <-- Añadido aquí
+
 
 
 class UserInterfaceNode(Node):
@@ -37,6 +39,9 @@ class UserInterfaceNode(Node):
         self.leg_cluster_pub = self.create_publisher(Marker, '/visualization/leg_clusters', 10)
         self.general_cluster_pub = self.create_publisher(Marker, '/visualization/general_clusters', 10)
         self.robot_marker_pub = self.create_publisher(Marker, '/visualization/robot_marker', 10)
+        self.diagnostic_pub = self.create_publisher(DiagnosticArray, '/diagnostics', 10)  # <-- Añadido
+        self.status_text_pub = self.create_publisher(Marker, '/visualization/status_text', 10)
+
 
         # Estado del sistema
         self.person_detected = False
@@ -137,11 +142,11 @@ class UserInterfaceNode(Node):
         marker.action = Marker.ADD
         marker.pose.position.x = 0.0
         marker.pose.position.y = 0.0
-        marker.pose.position.z = 0.0
+        marker.pose.position.z = 0.25 
         marker.pose.orientation.w = 1.0
-        marker.scale.x = 0.5
-        marker.scale.y = 0.5
-        marker.scale.z = 1.0
+        marker.scale.x = 0.5  # diámetro en x
+        marker.scale.y = 0.5  # diámetro en y
+        marker.scale.z = 0.5  # altura del cilindro
         marker.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=1.0)
         self.robot_marker_pub.publish(marker)
 
@@ -171,14 +176,73 @@ class UserInterfaceNode(Node):
         elif ns == "general":
             self.general_cluster_pub.publish(marker)
 
+    def publish_status_text_marker(self):
+        marker = Marker()
+        marker.header.frame_id = "base_footprint"
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "status_text"
+        marker.id = 200
+        marker.type = Marker.TEXT_VIEW_FACING
+        marker.action = Marker.ADD
+        marker.pose.position.x = 0.0
+        marker.pose.position.y = 0.0
+        marker.pose.position.z = 2.5  # Altura del texto sobre el robot
+        marker.pose.orientation.w = 1.0
+        marker.scale.z = 0.1  # Tamaño de la letra
+        marker.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=1.0)  # Blanco opaco
+
+        # Texto con estados actuales
+        text_lines = [
+            f"{self.camera_status}",
+            f"{self.detection_status}",
+            f"{self.tracking_status}",
+            f"Person detected: {'Yes' if self.person_detected else 'No'}"
+        ]
+        marker.text = "\n".join(text_lines)
+
+        self.status_text_pub.publish(marker)
+
+    def publish_legend_hud(self):
+        marker = Marker()
+        marker.header.frame_id = "base_footprint"  # <- Frame fijo (puedes usar 'odom' también)
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "legend_hud"
+        marker.id = 400
+        marker.type = Marker.TEXT_VIEW_FACING
+        marker.action = Marker.ADD
+        marker.pose.position.x = 2.0  # Coloca la leyenda en el espacio del mapa
+        marker.pose.position.y = 0.0
+        marker.pose.position.z = 1.5
+        marker.pose.orientation.w = 1.0
+        marker.scale.z = 0.3  # Tamaño del texto
+        marker.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=1.0)
+
+        # Texto de la leyenda
+        marker.text = (
+            "Leyenda:\n"
+            "🟡 Robot Base\n"
+            "🟢 Persona Detectada\n"
+            "🔵 Clusters Generales\n"
+            "🔴 Clusters Piernas"
+        )
+
+        self.status_text_pub.publish(marker)  # Puedes usar el mismo publisher que para textos
+
+
     def display_status(self):
-        self.publish_robot_marker()  # Asegura que se publique una vez
+        self.publish_robot_marker()  # Publica solo una vez
+        self.publish_status_text_marker()  # Actualiza el texto en cada timer
+
+        # Publica la leyenda solo una vez
+        if not hasattr(self, 'legend_published'):
+            self.publish_legend_hud()
+            self.legend_published = True
 
         current_status = {
-            "Cámara": self.camera_status,
-            "Detección": self.detection_status,
-            "Seguimiento": self.tracking_status,
-            "Persona detectada": "Sí" if self.person_detected else "No"
+            "Camera": self.camera_status,
+            "Detection": self.detection_status,
+            "Tracking": self.tracking_status,
+            "Person detected": "Yes" if self.person_detected else "No"
         }
 
         if current_status != self.previous_status:
