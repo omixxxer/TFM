@@ -70,7 +70,7 @@ Visualization Manager:
       Enabled: true
       Name: Person Marker
       Namespaces:
-        person: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -96,7 +96,7 @@ Visualization Manager:
       Enabled: true
       Name: General Clusters
       Namespaces:
-        {}
+        general: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -109,7 +109,7 @@ Visualization Manager:
       Enabled: true
       Name: Robot Marker
       Namespaces:
-        {}
+        robot: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -153,6 +153,19 @@ Visualization Manager:
         Value: /map_updates
       Use Timestamp: false
       Value: false
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Marker
+      Namespaces:
+        status_text: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /visualization/status_text
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -186,10 +199,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.7853981852531433
+      Pitch: 0.6553983092308044
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz_default_plugins)
-      Yaw: 0.7853981852531433
+      Yaw: 0.7103986144065857
     Saved: ~
 Window Geometry:
   Camera View:
