@@ -12,10 +12,11 @@ Power on
     Turn on the NUC
     Plug in the Kobuki USB cable to the NUC (first)
     Plug in the Lidar USB cable to the NUC (second)
+    Plueg in the Logitech Camera USB cable to the NUC (third)
 
 Power off
 
-    Unplug the USB cables of the Kobuki and the Lidar
+    Unplug the USB cables of the Kobuki, Camera and the Lidar
     Turn off the NUC (the battery pack will go off automatically)
     Turn off the switch on the Kobuki base
     Put the Kobuki on a charging station
