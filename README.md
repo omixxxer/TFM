@@ -27,6 +27,7 @@ Prerequisites:
 
     The laptop must be connected to the WiFi PIROBOTNET6 or PIROBOTNET6_5G
     The laptop must have ROS 2 Humble installed
+    The laptop must have Mediapipe installed
 
 Connection with ssh:
 
