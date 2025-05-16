@@ -30,11 +30,18 @@ Prerequisites:
     The laptop must have ROS 2 Humble installed
     The laptop must have Mediapipe installed
 
+
+Installation of MediaPipe:
+
+    sudo apt update
+    sudo apt install python3-pip
+    pip install mediapipe
+
 Connection with ssh:
 
 Open a terminal in the laptop and execute the command:
-
-ssh user@192.168.0.224
+    
+    ssh user@192.168.0.224
 
 The password is "qwerty".
 
