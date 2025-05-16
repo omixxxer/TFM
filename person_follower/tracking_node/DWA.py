@@ -1,11 +1,12 @@
 import rclpy
-import numpy as np
-import math
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, Point
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool, String
 from std_srvs.srv import SetBool
+from visualization_msgs.msg import Marker, MarkerArray
+import numpy as np
+import math
 
 class TrackingNode(Node):
     def __init__(self):
@@ -18,6 +19,23 @@ class TrackingNode(Node):
             return
 
         self.tracking_enabled = False
+        self.person_detected = False
+        self.person_position = None
+        self.last_person_update_time = None
+        self.timeout_duration = 2.0
+
+        self.velocity_publisher = self.create_publisher(Twist, '/tracking/velocity_cmd', 10)
+        self.position_publisher = self.create_publisher(Point, '/expected_person_position', 10)
+        self.status_publisher = self.create_publisher(String, '/tracking/status', 10)
+        self.trajectory_publisher = self.create_publisher(MarkerArray, '/dwa/trajectories', 10)
+
+        self.create_subscription(Point, '/person_position', self.person_position_callback, 10)
+        self.create_subscription(Bool, '/person_detected', self.detection_callback, 10)
+        self.create_subscription(LaserScan, '/scan', self.listener_callback, 10)
+        self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
+
+        self.create_service(SetBool, 'enable_tracking', self.enable_tracking_callback)
+
         self.kalman_state = np.zeros(4)
         self.kalman_covariance = np.eye(4) * 0.1
         self.kalman_F = np.eye(4)
@@ -25,33 +43,11 @@ class TrackingNode(Node):
         self.kalman_R = np.eye(2) * 0.05
         self.kalman_Q = np.eye(4) * 0.01
 
-        self.create_service(SetBool, 'enable_tracking', self.enable_tracking_callback)
-        self.declare_parameter('obstacle_avoidance_enabled', True)
-        self.obstacle_avoidance_enabled = self.get_parameter('obstacle_avoidance_enabled').value
-
-        self.person_position_subscription = self.create_subscription(Point, '/person_position', self.person_position_callback, 10)
-        self.person_detected_subscription = self.create_subscription(Bool, '/person_detected', self.detection_callback, 10)
-        self.scan_subscription = self.create_subscription(LaserScan, '/scan', self.listener_callback, 10)
-        self.shutdown_subscription = self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
-
-        self.status_publisher = self.create_publisher(String, '/tracking/status', 10)
-        self.velocity_publisher = self.create_publisher(Twist, '/tracking/velocity_cmd', 10)
-        self.position_publisher = self.create_publisher(Point, '/expected_person_position', 10)
-
-        self.person_detected = False
-        self.person_position = None
-        self.last_person_update_time = None
-        self.timeout_duration = 2.0
-        self.previous_vx = 0.0
-
-        self.max_speed = 0.8
-        self.min_speed = 0.0
-        self.max_yaw_rate = 1.6
-        self.max_accel = 0.2
-        self.dt = 0.1
+        self.max_speed = 0.6
+        self.max_angular_speed = 2.0
         self.predict_time = 1.0
 
-        self.get_logger().info("Nodo de Seguimiento con DWA iniciado")
+        self.get_logger().info("Nodo de Seguimiento con DWA y visualización iniciado.")
 
     def enable_tracking_callback(self, request, response):
         self.tracking_enabled = request.data
@@ -68,97 +64,137 @@ class TrackingNode(Node):
         self.kalman_F[:2, 2:] = np.eye(2) * 0.1
         predicted_state = self.kalman_F @ self.kalman_state
         predicted_covariance = self.kalman_F @ self.kalman_covariance @ self.kalman_F.T + self.kalman_Q
+
         y = z - (self.kalman_H @ predicted_state)
         S = self.kalman_H @ predicted_covariance @ self.kalman_H.T + self.kalman_R
         K = predicted_covariance @ self.kalman_H.T @ np.linalg.inv(S)
+
         self.kalman_state = predicted_state + K @ y
         self.kalman_covariance = (np.eye(4) - K @ self.kalman_H) @ predicted_covariance
+
         self.person_position = Point(x=self.kalman_state[0], y=self.kalman_state[1])
         self.last_person_update_time = self.get_clock().now()
+
         self.position_publisher.publish(self.person_position)
+        self.get_logger().info(f"Posición estimada: x={self.person_position.x:.2f}, y={self.person_position.y:.2f}")
 
-    def calc_dynamic_window(self, vx):
-        return [
-            max(self.min_speed, vx - self.max_accel * self.dt),
-            min(self.max_speed, vx + self.max_accel * self.dt),
-            -self.max_yaw_rate,
-            self.max_yaw_rate
-        ]
-
-    def simulate_trajectory(self, vx, wz):
-        x, y, theta = 0.0, 0.0, 0.0
-        traj = []
-        for _ in range(int(self.predict_time / self.dt)):
-            x += vx * math.cos(theta) * self.dt
-            y += vx * math.sin(theta) * self.dt
-            theta += wz * self.dt
-            traj.append((x, y))
-        return traj
-
-    def get_obstacles(self, scan):
-        angle = scan.angle_min
-        obstacles = []
-        for r in scan.ranges:
-            if scan.range_min < r < scan.range_max:
-                x = r * math.cos(angle)
-                y = r * math.sin(angle)
-                obstacles.append((x, y))
-            angle += scan.angle_increment
-        return obstacles
-
-    def evaluate_trajectory(self, traj, goal, scan):
-        goal_dist = math.hypot(goal[0] - traj[-1][0], goal[1] - traj[-1][1])
-        obst_dists = [math.hypot(px - x, py - y) for (px, py) in traj for (x, y) in self.get_obstacles(scan)]
-        min_obst_dist = min(obst_dists) if obst_dists else 1.0
-        return -goal_dist + 0.8 * min_obst_dist
-
-    def listener_callback(self, input_msg):
+    def listener_callback(self, scan_data):
         if not self.tracking_enabled or not self.person_detected or not self.person_position:
             self.stop_robot()
             return
 
         if self.last_person_update_time is None or (self.get_clock().now() - self.last_person_update_time).nanoseconds * 1e-9 > self.timeout_duration:
-            self.get_logger().warn("Tiempo de espera agotado. Deteniendo robot.")
+            self.get_logger().warn("Timeout posición persona. Deteniendo robot.")
             self.stop_robot()
             return
 
-        dw = self.calc_dynamic_window(self.previous_vx)
-        best_score = -float('inf')
-        best_vx, best_wz = 0.0, 0.0
-        goal = (self.person_position.x, self.person_position.y)
+        vx, wz, markers = self.dynamic_window_approach(scan_data)
+        self.trajectory_publisher.publish(markers)
 
-        for vx in np.linspace(dw[0], dw[1], num=5):
-            for wz in np.linspace(dw[2], dw[3], num=5):
-                traj = self.simulate_trajectory(vx, wz)
-                score = self.evaluate_trajectory(traj, goal, input_msg)
-                if score > best_score:
-                    best_score = score
-                    best_vx, best_wz = vx, wz
-
-        self.previous_vx = best_vx
         cmd_msg = Twist()
-        cmd_msg.linear.x = best_vx
-        cmd_msg.angular.z = best_wz
+        cmd_msg.linear.x = vx
+        cmd_msg.angular.z = wz
         self.velocity_publisher.publish(cmd_msg)
+
+        self.get_logger().info(f"Comando: v={vx:.2f} m/s, w={wz:.2f} rad/s")
+
+    def dynamic_window_approach(self, scan_data):
+        best_score = -float('inf')
+        best_v, best_w = 0.0, 0.0
+        markers = MarkerArray()
+        marker_id = 0
+
+        v_samples = np.linspace(0, self.max_speed, num=7)
+        w_samples = np.linspace(-self.max_angular_speed, self.max_angular_speed, num=5)
+
+        for v in v_samples:
+            for w in w_samples:
+                heading_score = self.heading(v, w)
+                clearance_score = self.clearance(v, w, scan_data)
+                velocity_score = v / self.max_speed
+
+                total_score = 0.5 * heading_score + 0.4 * clearance_score + 0.1 * velocity_score
+
+                marker = Marker()
+                marker.header.frame_id = "base_footprint"
+                marker.header.stamp = self.get_clock().now().to_msg()
+                marker.ns = "dwa"
+                marker.id = marker_id
+                marker.type = Marker.ARROW
+                marker.scale.x = 0.05
+                marker.scale.y = 0.1
+                marker.scale.z = 0.1
+                marker.color.r = 1.0 - total_score
+                marker.color.g = total_score
+                marker.color.b = 0.0
+                marker.color.a = 0.8
+
+                end_x = v * self.predict_time * math.cos(w * self.predict_time)
+                end_y = v * self.predict_time * math.sin(w * self.predict_time)
+                marker.points = [Point(x=0.0, y=0.0, z=0.0), Point(x=end_x, y=end_y, z=0.0)]
+
+                markers.markers.append(marker)
+                marker_id += 1
+
+                if total_score > best_score:
+                    best_score = total_score
+                    best_v = v
+                    best_w = w
+
+        # Mejor trayectoria destacada en azul
+        best_marker = Marker()
+        best_marker.header.frame_id = "base_footprint"
+        best_marker.header.stamp = self.get_clock().now().to_msg()
+        best_marker.ns = "dwa_best"
+        best_marker.id = marker_id
+        best_marker.type = Marker.ARROW
+        best_marker.scale.x = 0.1
+        best_marker.scale.y = 0.2
+        best_marker.scale.z = 0.2
+        best_marker.color.r = 0.0
+        best_marker.color.g = 0.0
+        best_marker.color.b = 1.0
+        best_marker.color.a = 1.0
+
+        end_x = best_v * self.predict_time * math.cos(best_w * self.predict_time)
+        end_y = best_v * self.predict_time * math.sin(best_w * self.predict_time)
+        best_marker.points = [Point(x=0.0, y=0.0, z=0.0), Point(x=end_x, y=end_y, z=0.0)]
+
+        markers.markers.append(best_marker)
+
+        return best_v, best_w, markers
+
+    def heading(self, v, w):
+        px = v * math.cos(w * self.predict_time)
+        py = v * math.sin(w * self.predict_time)
+        dx = self.person_position.x - px
+        dy = self.person_position.y - py
+        angle_error = math.atan2(dy, dx)
+        return math.cos(angle_error)
+
+    def clearance(self, v, w, scan_data):
+        min_dist = float('inf')
+        for i, r in enumerate(scan_data.ranges):
+            if scan_data.range_min < r < scan_data.range_max:
+                angle = scan_data.angle_min + i * scan_data.angle_increment
+                pred_x = v * math.cos(angle + w * self.predict_time)
+                pred_y = v * math.sin(angle + w * self.predict_time)
+                distance = math.hypot(pred_x, pred_y)
+                if distance < min_dist:
+                    min_dist = distance
+        return min(1.0, min_dist)
 
     def stop_robot(self):
         cmd_msg = Twist()
         cmd_msg.linear.x = 0.0
         cmd_msg.angular.z = 0.0
         self.velocity_publisher.publish(cmd_msg)
-
-    def publish_status(self, message):
-        self.status_publisher.publish(String(data=message))
+        self.get_logger().info("Robot detenido.")
 
     def shutdown_callback(self, msg):
         if msg.data:
-            self.get_logger().info("Cierre del sistema detectado. Enviando confirmación.")
-            try:
-                self.shutdown_confirmation_publisher.publish(Bool(data=True))
-            except Exception as e:
-                self.get_logger().error(f"Error al publicar confirmación de apagado: {e}")
-            finally:
-                self.destroy_node()
+            self.get_logger().info("Apagando nodo.")
+            self.destroy_node()
 
 def main(args=None):
     rclpy.init(args=args)
@@ -166,7 +202,7 @@ def main(args=None):
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info("Nodo de Seguimiento detenido manualmente.")
+        node.get_logger().info("Nodo detenido manualmente.")
     finally:
         node.destroy_node()
         rclpy.shutdown()
