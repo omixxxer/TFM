@@ -159,94 +159,94 @@ class DetectionNode(Node):
         #self.log_info("Interpolación realizada", {"factor": factor})
         return interpolated_ranges, interpolated_angles
 
-def detect_person(self, ranges, angle_min, angle_increment):
-    points = [
-        (r * np.cos(angle_min + i * angle_increment), r * np.sin(angle_min + i * angle_increment))
-        for i, r in enumerate(ranges)
-        if self.min_detection_distance < r < self.max_detection_distance
-    ]
-
-    if not points:
-        self.log_info("No se detectaron puntos", {"status": "no_points"})
-        return False
-
-    points = np.array(points)
-    clustering = DBSCAN(eps=self.dbscan_eps, min_samples=self.dbscan_min_samples).fit(points)
-    labels = clustering.labels_
-
-    # Agrupa los puntos según las etiquetas de DBSCAN
-    clusters = [points[labels == label] for label in set(labels) if label != -1]
-
-    # Detectar clusters de piernas
-    all_clusters, leg_clusters = self.detect_leg_clusters(clusters)
-
-    # Publicar clusters generales
-    self.publish_general_clusters(points, labels)
-
-    candidate_positions = []
-    used_indices = set()
-
-    for i, cluster_i in enumerate(leg_clusters):
-        if i in used_indices:
-            continue
-        center_i = np.mean(cluster_i, axis=0)
-        # Buscar el cluster de pierna más cercano al actual
-        min_dist = float('inf')
-        closest_j = None
-        for j, cluster_j in enumerate(leg_clusters):
-            if i == j or j in used_indices:
-                continue
-            center_j = np.mean(cluster_j, axis=0)
-            dist = np.linalg.norm(center_i - center_j)
-            if self.min_leg_distance < dist < self.max_leg_distance and dist < min_dist:
-                min_dist = dist
-                closest_j = j
-        if closest_j is not None:
-            combined_cluster = np.concatenate([cluster_i, leg_clusters[closest_j]])
-            person_pos = np.mean(combined_cluster, axis=0)
-            candidate_positions.append(person_pos)
-            used_indices.add(i)
-            used_indices.add(closest_j)
-
-    if candidate_positions:
-        # Comprobamos si el objetivo anterior sigue presente
-        target_found = False
-        if hasattr(self, 'current_target_id'):
-            for pos in candidate_positions:
-                if self.current_target_id in self.last_seen_positions:
-                    prev_pos = self.last_seen_positions[self.current_target_id]['position']
-                    if np.linalg.norm(pos - prev_pos) < self.max_leg_distance:
-                        # El objetivo anterior sigue ahí
-                        target_found = True
-                        selected_person = pos
-                        self.last_seen_positions[self.current_target_id]['timestamp'] = time.time()
-                        break
-
-        if not target_found:
-            # Elegir la persona más cercana
-            selected_person = min(candidate_positions, key=lambda pos: np.linalg.norm(pos))
-            person_id = self.get_person_id(selected_person)
-            self.current_target_id = person_id  # Nuevo objetivo
-
-        # Publicar posición seleccionada
-        person_position = Point(x=selected_person[0], y=selected_person[1], z=float(self.current_target_id))
-        self.person_position_publisher.publish(person_position)
-
-        # Publicar clusters de piernas (visualización)
-        leg_points = np.concatenate(leg_clusters)
-        self.publish_leg_clusters(leg_points)
-
-        self.log_info(
-            f"Persona {self.current_target_id} seleccionada (seguimiento activo)",
-            {"x": selected_person[0], "y": selected_person[1]}
-        )
-        return True
-
-    else:
-        self.log_info("No se encontraron pares de piernas válidos", {})
-
-    return False
+    def detect_person(self, ranges, angle_min, angle_increment):
+        points = [
+            (r * np.cos(angle_min + i * angle_increment), r * np.sin(angle_min + i * angle_increment))
+            for i, r in enumerate(ranges)
+            if self.min_detection_distance < r < self.max_detection_distance
+        ]
     
+        if not points:
+            self.log_info("No se detectaron puntos", {"status": "no_points"})
+            return False
+    
+        points = np.array(points)
+        clustering = DBSCAN(eps=self.dbscan_eps, min_samples=self.dbscan_min_samples).fit(points)
+        labels = clustering.labels_
+    
+        # Agrupa los puntos según las etiquetas de DBSCAN
+        clusters = [points[labels == label] for label in set(labels) if label != -1]
+    
+        # Detectar clusters de piernas
+        all_clusters, leg_clusters = self.detect_leg_clusters(clusters)
+    
+        # Publicar clusters generales
+        self.publish_general_clusters(points, labels)
+    
+        candidate_positions = []
+        used_indices = set()
+    
+        for i, cluster_i in enumerate(leg_clusters):
+            if i in used_indices:
+                continue
+            center_i = np.mean(cluster_i, axis=0)
+            # Buscar el cluster de pierna más cercano al actual
+            min_dist = float('inf')
+            closest_j = None
+            for j, cluster_j in enumerate(leg_clusters):
+                if i == j or j in used_indices:
+                    continue
+                center_j = np.mean(cluster_j, axis=0)
+                dist = np.linalg.norm(center_i - center_j)
+                if self.min_leg_distance < dist < self.max_leg_distance and dist < min_dist:
+                    min_dist = dist
+                    closest_j = j
+            if closest_j is not None:
+                combined_cluster = np.concatenate([cluster_i, leg_clusters[closest_j]])
+                person_pos = np.mean(combined_cluster, axis=0)
+                candidate_positions.append(person_pos)
+                used_indices.add(i)
+                used_indices.add(closest_j)
+    
+        if candidate_positions:
+            # Comprobamos si el objetivo anterior sigue presente
+            target_found = False
+            if hasattr(self, 'current_target_id'):
+                for pos in candidate_positions:
+                    if self.current_target_id in self.last_seen_positions:
+                        prev_pos = self.last_seen_positions[self.current_target_id]['position']
+                        if np.linalg.norm(pos - prev_pos) < self.max_leg_distance:
+                            # El objetivo anterior sigue ahí
+                            target_found = True
+                            selected_person = pos
+                            self.last_seen_positions[self.current_target_id]['timestamp'] = time.time()
+                            break
+    
+            if not target_found:
+                # Elegir la persona más cercana
+                selected_person = min(candidate_positions, key=lambda pos: np.linalg.norm(pos))
+                person_id = self.get_person_id(selected_person)
+                self.current_target_id = person_id  # Nuevo objetivo
+    
+            # Publicar posición seleccionada
+            person_position = Point(x=selected_person[0], y=selected_person[1], z=float(self.current_target_id))
+            self.person_position_publisher.publish(person_position)
+    
+            # Publicar clusters de piernas (visualización)
+            leg_points = np.concatenate(leg_clusters)
+            self.publish_leg_clusters(leg_points)
+    
+            self.log_info(
+                f"Persona {self.current_target_id} seleccionada (seguimiento activo)",
+                {"x": selected_person[0], "y": selected_person[1]}
+            )
+            return True
+    
+        else:
+            self.log_info("No se encontraron pares de piernas válidos", {})
+    
+        return False
+        
     
     def detect_leg_clusters(self, clusters):
         """Detecta los clusters de piernas y devuelve ambos: los clusters generales y los de piernas."""
