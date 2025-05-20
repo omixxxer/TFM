@@ -24,12 +24,10 @@ setup(
     entry_points={
         'console_scripts': [
             'control_node = person_follower.control_node.control_node:main',
-            'camera_node = person_follower.camera_node.camera_node:main',
+            'visual_detection_node = person_follower.visual_detection_node.visual_detection_node:main',
             'detection_node = person_follower.detection_node.detection_node:main',
             'tracking_node = person_follower.tracking_node.tracking_node:main',
-            'collision_handling_node = person_follower.collision_handling_node.collision_handling_node:main',
             'user_interface_node = person_follower.user_interface_node.user_interface_node:main',
-            'SLAM_node = person_follower.SLAM_node.SLAM_node:main',
         ],
     },
 )

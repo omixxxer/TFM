@@ -1,27 +1,21 @@
 control_node:
   ros__parameters:
-    enabled: True
+    enabled: True          # Controla si el tracking_node está activo o no.
+    camera_enabled: False   # Controla si el visual_detection_node se va a usar, en caso de estar activado no se utilizará el control por gestos.
 
 tracking_node:
   ros__parameters:
-    enabled: True  # Controla si el tracking_node está activo o no
+    enabled: True  # Controla si el tracking_node está activo o no.
 
-camera_node:
+visual_detection_node:
   ros__parameters:
-    enabled: True   # Controla si el camera_node está activo o no
+    enabled: True   # Controla si el visual_detection_node está activo o no.
 
 detection_node:
   ros__parameters:
-    enabled: True   # Controla si el detection_node está activo o no
-
-collision_handling_node:
-  ros__parameters:
-    enabled: False   # Controla si el collision_handling_node está activo o no
+    enabled: True   # Controla si el detection_node está activo o no.
 
 user_interface_node:
   ros__parameters:
-    enabled: True  # Controla si el user_interface_node está activo o no
+    enabled: True  # Controla si el user_interface_node está activo o no.
 
-SLAM_node:
-  ros__parameters:
-    enabled: False  # Controla si el slam_node está activo o no

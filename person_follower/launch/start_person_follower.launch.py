@@ -32,8 +32,8 @@ def generate_launch_description():
         ),
         Node(
             package='person_follower',
-            executable='camera_node',
-            name='camera_node',
+            executable='visual_detection_node',
+            name='visual_detection_node',
             output='screen',
             parameters=[config_path]
         ),
@@ -48,13 +48,6 @@ def generate_launch_description():
             package='person_follower',
             executable='user_interface_node',
             name='user_interface_node',
-            output='screen',
-            parameters=[config_path]
-        ),
-        Node(
-            package='person_follower',
-            executable='SLAM_node',
-            name='SLAM_node',
             output='screen',
             parameters=[config_path]
         )
