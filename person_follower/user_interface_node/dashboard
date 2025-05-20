@@ -1,0 +1,83 @@
+import React, { useEffect, useRef, useState } from 'react';
+import ROSLIB from 'roslib';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+
+export default function OperatorDashboard() {
+  const [cameraStatus, setCameraStatus] = useState('Desconocido');
+  const [detectionStatus, setDetectionStatus] = useState('Desconocido');
+  const [trackingStatus, setTrackingStatus] = useState('Desconocido');
+  const [personDetected, setPersonDetected] = useState(false);
+
+  const ros = useRef<ROSLIB.Ros>();
+  const viewerRef = useRef<HTMLDivElement>(null);
+
+  // Inicializa conexión ROS
+  useEffect(() => {
+    ros.current = new ROSLIB.Ros({ url: 'ws://localhost:9090' });
+
+    // Suscripciones
+    new ROSLIB.Topic({
+      ros: ros.current,
+      name: '/camera/status',
+      messageType: 'std_msgs/String'
+    }).subscribe(msg => setCameraStatus(msg.data));
+
+    new ROSLIB.Topic({
+      ros: ros.current,
+      name: '/detection/status',
+      messageType: 'std_msgs/String'
+    }).subscribe(msg => setDetectionStatus(msg.data));
+
+    new ROSLIB.Topic({
+      ros: ros.current,
+      name: '/tracking/status',
+      messageType: 'std_msgs/String'
+    }).subscribe(msg => setTrackingStatus(msg.data));
+
+    new ROSLIB.Topic({
+      ros: ros.current,
+      name: '/person_detected',
+      messageType: 'std_msgs/Bool'
+    }).subscribe(msg => setPersonDetected(msg.data));
+
+    // TODO: Inicializar Ros3D / Three.js para visualización 3D
+    // const viewer = new ROS3D.Viewer({
+    //   divID: '3dviewer', width: 600, height: 400, antialias: true
+    // });
+    // new ROS3D.Grid({ ros: ros.current, ... }).addTo(viewer);
+
+    return () => {
+      ros.current?.close();
+    };
+  }, []);
+
+  return (
+    <div className="grid grid-cols-3 gap-4 p-4">
+      {/* Panel de estados */}
+      <div className="col-span-1 space-y-4">
+        <Card>
+          <CardContent>
+            <h2 className="text-xl font-semibold">Estado del Sistema</h2>
+            <p><strong>Cámara:</strong> {cameraStatus}</p>
+            <p><strong>Detección:</strong> {detectionStatus}</p>
+            <p><strong>Tracking:</strong> {trackingStatus}</p>
+            <p><strong>Persona detectada:</strong> {personDetected ? 'Sí' : 'No'}</p>
+          </CardContent>
+        </Card>
+
+        {/* Controles de operador */}
+        <Card>
+          <CardContent>
+            <h2 className="text-xl font-semibold">Controles</h2>
+            <Button className="w-full mb-2">Reiniciar Tracking</Button>
+            <Button className="w-full mb-2" variant="destructive">Detener Sistema</Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Visualización 3D */}
+      <div id="3dviewer" ref={viewerRef} className="col-span-2 h-full border rounded-lg" />
+    </div>
+  );
+}
