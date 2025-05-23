@@ -1,7 +1,7 @@
 control_node:
   ros__parameters:
     enabled: True          # Controla si el tracking_node está activo o no.
-    camera_enabled: False   # Controla si el visual_detection_node se va a usar, en caso de estar activado no se utilizará el control por gestos.
+    camera_enabled: True   # Controla si el visual_detection_node se va a usar, en caso de estar activado no se utilizará el control por gestos.
 
 tracking_node:
   ros__parameters:
