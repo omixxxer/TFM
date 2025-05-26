@@ -235,9 +235,11 @@ def main(args=None):
     except KeyboardInterrupt:
         node.get_logger().info("Nodo Cámara detenido manualmente.")
     finally:
+        # Cerramos ventanas de OpenCV
+        import cv2
         cv2.destroyAllWindows()
         node.destroy_node()
-        rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

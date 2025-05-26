@@ -1,271 +1,278 @@
+import os
+import select
+import termios
+import tty
+import threading
+
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Bool, String, Float32MultiArray
 from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker
 from std_msgs.msg import ColorRGBA
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 import subprocess
-from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue  # <-- Añadido aquí
-
-
 
 class UserInterfaceNode(Node):
     def __init__(self):
         super().__init__('user_interface_node')
 
+        # Parámetros
         self.declare_parameter('enabled', True)
         self.declare_parameter('visualization_enabled', True)
-
-        self.enabled = self.get_parameter('enabled').value
+        self.enabled             = self.get_parameter('enabled').value
         self.visualization_enabled = self.get_parameter('visualization_enabled').value
 
         if not self.enabled:
             self.get_logger().info("Nodo de Interfaz de Usuario desactivado.")
             return
 
-        self.initialize_shutdown_listener()
-
-        # Subscripciones
-        self.create_subscription(String, '/camera/status', self.camera_status_callback, 10)
-        self.create_subscription(String, '/detection/status', self.detection_status_callback, 10)
-        self.create_subscription(String, '/tracking/status', self.tracking_status_callback, 10)
-        self.create_subscription(Bool, '/person_detected', self.person_detected_callback, 10)
-        self.create_subscription(Float32MultiArray, '/clusters/general', self.general_clusters_callback, 10)
-        self.create_subscription(Float32MultiArray, '/clusters/legs', self.leg_clusters_callback, 10)
-        self.create_subscription(Point, '/expected_person_position', self.person_position_callback, 10)
-
-        # Publicadores de RViz
-        self.marker_pub = self.create_publisher(Marker, '/visualization/person_marker', 10)
-        self.leg_cluster_pub = self.create_publisher(Marker, '/visualization/leg_clusters', 10)
-        self.general_cluster_pub = self.create_publisher(Marker, '/visualization/general_clusters', 10)
-        self.robot_marker_pub = self.create_publisher(Marker, '/visualization/robot_marker', 10)
-        self.diagnostic_pub = self.create_publisher(DiagnosticArray, '/diagnostics', 10)  # <-- Añadido
-        self.status_text_pub = self.create_publisher(Marker, '/visualization/status_text', 10)
-
-
         # Estado del sistema
-        self.person_detected = False
-        self.camera_status = "Desconocido"
-        self.detection_status = "Desconocido"
-        self.tracking_status = "Desconocido"
-        self.previous_status = {}
+        self.person_detected   = False
+        self.camera_status     = "Desconocido"
+        self.detection_status  = "Desconocido"
+        self.tracking_status   = "Desconocido"
+        self.control_mode      = "AUTO"      # nuevo
+        self.previous_status   = {}
 
         # Flags internos
         self.robot_marker_published = False
         self.last_cluster_publish_time = self.get_clock().now()
 
+        # Inicializar shutdown
+        self.initialize_shutdown_listener()
+
+        # Subscripciones
+        self.create_subscription(String, '/camera/status',        self.camera_status_callback,    10)
+        self.create_subscription(String, '/detection/status',     self.detection_status_callback, 10)
+        self.create_subscription(String, '/tracking/status',      self.tracking_status_callback,  10)
+        self.create_subscription(Bool,   '/person_detected',      self.person_detected_callback,  10)
+        self.create_subscription(Float32MultiArray, '/clusters/general', self.general_clusters_callback, 10)
+        self.create_subscription(Float32MultiArray, '/clusters/legs',    self.leg_clusters_callback,     10)
+        self.create_subscription(Point,  '/expected_person_position',    self.person_position_callback,  10)
+        # Nuevo: modo de control
+        self.create_subscription(String, '/control/mode',         self.mode_callback,             10)
+
+        # Publicadores
+        self.marker_pub        = self.create_publisher(Marker,         '/visualization/person_marker', 10)
+        self.leg_cluster_pub   = self.create_publisher(Marker,         '/visualization/leg_clusters',  10)
+        self.general_cluster_pub = self.create_publisher(Marker,       '/visualization/general_clusters', 10)
+        self.robot_marker_pub  = self.create_publisher(Marker,         '/visualization/robot_marker', 10)
+        self.status_text_pub   = self.create_publisher(Marker,         '/visualization/status_text',  10)
+        self.diagnostic_pub    = self.create_publisher(DiagnosticArray,'/diagnostics',              10)
+
+        # Lanzar RViz
         self.start_rviz()
 
-        # Timer para actualizar estado
+        # Timer para refrescar HUD
         self.timer = self.create_timer(5.0, self.display_status)
 
         self.get_logger().info("Nodo de Interfaz de Usuario iniciado.")
 
     def start_rviz(self):
-        rviz_config_path = '/home/usuario/ros2_ws/src/rviz/config.rviz'
-        self.stop_rviz()  # Detener proceso previo si existiera
+        rviz_config = '/home/usuario/ros2_ws/src/rviz/config.rviz'
+        self.stop_rviz()
         try:
-            self.rviz_process = subprocess.Popen(['rviz2', '-d', rviz_config_path])
-            self.get_logger().info(f"RViz2 iniciado con configuración: {rviz_config_path}")
-        except FileNotFoundError as e:
-            self.get_logger().error(f"No se pudo iniciar RViz2. Verifica la instalación. Error: {e}")
+            self.rviz_process = subprocess.Popen(['rviz2', '-d', rviz_config])
+            self.get_logger().info(f"RViz2 iniciado con configuración: {rviz_config}")
         except Exception as e:
-            self.get_logger().error(f"Error al iniciar RViz2: {e}")
+            self.get_logger().error(f"No se pudo iniciar RViz2: {e}")
 
     def stop_rviz(self):
         if hasattr(self, 'rviz_process') and self.rviz_process:
             self.rviz_process.terminate()
             self.get_logger().info("RViz2 detenido.")
 
-    def camera_status_callback(self, msg): self.camera_status = msg.data
-    def detection_status_callback(self, msg): self.detection_status = msg.data
-    def tracking_status_callback(self, msg): self.tracking_status = msg.data
-    def person_detected_callback(self, msg): self.person_detected = msg.data
+    # --- Callbacks de estado ---
+    def camera_status_callback(self, msg: String):
+        self.camera_status = msg.data
 
+    def detection_status_callback(self, msg: String):
+        self.detection_status = msg.data
+
+    def tracking_status_callback(self, msg: String):
+        self.tracking_status = msg.data
+
+    def person_detected_callback(self, msg: Bool):
+        self.person_detected = msg.data
+
+    def mode_callback(self, msg: String):
+        if msg.data != self.control_mode:
+            self.control_mode = msg.data
+            self.get_logger().info(f"Modo de control cambiado a: {self.control_mode}")
+            # publicar diagnóstico
+            diag = DiagnosticArray()
+            status = DiagnosticStatus()
+            status.name = "Control Mode"
+            status.level = DiagnosticStatus.OK
+            status.message = self.control_mode
+            status.values = [KeyValue(key="mode", value=self.control_mode)]
+            diag.status.append(status)
+            self.diagnostic_pub.publish(diag)
+
+    # --- Callbacks de clusters/persona ---
     def person_position_callback(self, msg: Point):
         if not self.visualization_enabled:
             return
-
-        marker = Marker()
-        marker.header.frame_id = "base_footprint"
-        marker.header.stamp = self.get_clock().now().to_msg()
-        marker.ns = "person"
-        marker.id = 0
-        marker.type = Marker.SPHERE
-        marker.action = Marker.ADD
-        marker.pose.position.x = -msg.x  
-        marker.pose.position.y = -msg.y  
-        marker.pose.position.z = 0.0
-        marker.pose.orientation.w = 1.0
-        marker.scale.x = marker.scale.y = marker.scale.z = 0.4
-        marker.color = ColorRGBA(r=0.0, g=1.0, b=0.0, a=1.0)
-        self.marker_pub.publish(marker)
+        m = Marker()
+        m.header.frame_id = "base_footprint"
+        m.header.stamp = self.get_clock().now().to_msg()
+        m.ns = "person"
+        m.id = 0
+        m.type = Marker.SPHERE
+        m.action = Marker.ADD
+        m.pose.position.x = -msg.x
+        m.pose.position.y = -msg.y
+        m.pose.position.z = 0.0
+        m.pose.orientation.w = 1.0
+        m.scale.x = m.scale.y = m.scale.z = 0.4
+        m.color = ColorRGBA(r=0.0, g=1.0, b=0.0, a=1.0)
+        self.marker_pub.publish(m)
 
     def leg_clusters_callback(self, msg: Float32MultiArray):
         if not self.visualization_enabled:
             return
-
-        if (self.get_clock().now() - self.last_cluster_publish_time).nanoseconds * 1e-9 < 0.5:
+        elapsed = (self.get_clock().now() - self.last_cluster_publish_time).nanoseconds * 1e-9
+        if elapsed < 0.5:
             return
         self.last_cluster_publish_time = self.get_clock().now()
-
-        if not msg.data or len(msg.data) % 2 != 0:
+        data = msg.data
+        if not data or len(data) % 2 != 0:
             self.get_logger().warn("Datos inválidos en clusters de piernas.")
             return
-
-        self.publish_cluster_marker(msg.data, "legs", 1.0, 0.0, 0.0)
+        self.publish_cluster_marker(data, "legs", 1.0, 0.0, 0.0)
 
     def general_clusters_callback(self, msg: Float32MultiArray):
         if not self.visualization_enabled:
             return
-
-        if (self.get_clock().now() - self.last_cluster_publish_time).nanoseconds * 1e-9 < 0.5:
+        elapsed = (self.get_clock().now() - self.last_cluster_publish_time).nanoseconds * 1e-9
+        if elapsed < 0.5:
             return
         self.last_cluster_publish_time = self.get_clock().now()
-
-        if not msg.data or len(msg.data) % 2 != 0:
+        data = msg.data
+        if not data or len(data) % 2 != 0:
             self.get_logger().warn("Datos inválidos en clusters generales.")
             return
+        self.publish_cluster_marker(data, "general", 0.0, 0.0, 1.0)
 
-        self.publish_cluster_marker(msg.data, "general", 0.0, 0.0, 1.0)
+    def publish_cluster_marker(self, data, ns, r, g, b):
+        m = Marker()
+        m.header.frame_id = "base_footprint"
+        m.header.stamp = self.get_clock().now().to_msg()
+        m.ns = ns
+        m.id = 0
+        m.type = Marker.POINTS
+        m.action = Marker.ADD
+        m.scale.x = 0.05
+        m.scale.y = 0.05
+        m.color = ColorRGBA(r=r, g=g, b=b, a=1.0)
+        for i in range(0, len(data), 2):
+            p = Point(x=-data[i], y=-data[i+1], z=0.0)
+            m.points.append(p)
+        if ns == "legs":
+            self.leg_cluster_pub.publish(m)
+        else:
+            self.general_cluster_pub.publish(m)
 
     def publish_robot_marker(self):
         if self.robot_marker_published:
             return
-
-        marker = Marker()
-        marker.header.frame_id = "base_footprint"
-        marker.header.stamp = self.get_clock().now().to_msg()
-        marker.ns = "robot"
-        marker.id = 100
-        marker.type = Marker.CYLINDER
-        marker.action = Marker.ADD
-        marker.pose.position.x = 0.0
-        marker.pose.position.y = 0.0
-        marker.pose.position.z = 0.25 
-        marker.pose.orientation.w = 1.0
-        marker.scale.x = 0.5  # diámetro en x
-        marker.scale.y = 0.5  # diámetro en y
-        marker.scale.z = 0.5  # altura del cilindro
-        marker.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=1.0)
-        self.robot_marker_pub.publish(marker)
-
+        m = Marker()
+        m.header.frame_id = "base_footprint"
+        m.header.stamp = self.get_clock().now().to_msg()
+        m.ns = "robot"
+        m.id = 100
+        m.type = Marker.CYLINDER
+        m.action = Marker.ADD
+        m.pose.position.z = 0.25
+        m.pose.orientation.w = 1.0
+        m.scale.x = m.scale.y = 0.5
+        m.scale.z = 0.5
+        m.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=1.0)
+        self.robot_marker_pub.publish(m)
         self.robot_marker_published = True
 
-    def publish_cluster_marker(self, data, ns, r, g, b):
-        marker = Marker()
-        marker.header.frame_id = "base_footprint"
-        marker.header.stamp = self.get_clock().now().to_msg()
-        marker.ns = ns
-        marker.id = 0
-        marker.type = Marker.POINTS
-        marker.action = Marker.ADD
-        marker.scale.x = 0.05
-        marker.scale.y = 0.05
-        marker.color = ColorRGBA(r=r, g=g, b=b, a=1.0)
-
-        for i in range(0, len(data), 2):
-            p = Point()
-            p.x = -data[i]
-            p.y = -data[i + 1]
-            p.z = 0.0
-            marker.points.append(p)
-
-        if ns == "legs":
-            self.leg_cluster_pub.publish(marker)
-        elif ns == "general":
-            self.general_cluster_pub.publish(marker)
-
     def publish_status_text_marker(self):
-        marker = Marker()
-        marker.header.frame_id = "base_footprint"
-        marker.header.stamp = self.get_clock().now().to_msg()
-        marker.ns = "status_text"
-        marker.id = 200
-        marker.type = Marker.TEXT_VIEW_FACING
-        marker.action = Marker.ADD
-        marker.pose.position.x = 0.0
-        marker.pose.position.y = 0.0
-        marker.pose.position.z = 2.5  # Altura del texto sobre el robot
-        marker.pose.orientation.w = 1.0
-        marker.scale.z = 0.1  # Tamaño de la letra
-        marker.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=1.0)  # Blanco opaco
+        m = Marker()
+        m.header.frame_id = "base_footprint"
+        m.header.stamp = self.get_clock().now().to_msg()
+        m.ns = "status_text"
+        m.id = 200
+        m.type = Marker.TEXT_VIEW_FACING
+        m.action = Marker.ADD
+        m.pose.position.z = 2.5
+        m.pose.orientation.w = 1.0
+        m.scale.z = 0.1
+        m.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=1.0)
 
-        # Texto con estados actuales
-        text_lines = [
-            f"{self.camera_status}",
-            f"{self.detection_status}",
-            f"{self.tracking_status}",
-            f"Person detected: {'Yes' if self.person_detected else 'No'}"
+        lines = [
+            f"Cámara: {self.camera_status}",
+            f"Detección: {self.detection_status}",
+            f"Tracking: {self.tracking_status}",
+            f"Persona: {'Sí' if self.person_detected else 'No'}",
+            f"Modo Control: {self.control_mode}"
         ]
-        marker.text = "\n".join(text_lines)
-
-        self.status_text_pub.publish(marker)
+        m.text = "\n".join(lines)
+        self.status_text_pub.publish(m)
 
     def publish_legend_hud(self):
-        marker = Marker()
-        marker.header.frame_id = "base_footprint"  # <- Frame fijo (puedes usar 'odom' también)
-        marker.header.stamp = self.get_clock().now().to_msg()
-        marker.ns = "legend_hud"
-        marker.id = 400
-        marker.type = Marker.TEXT_VIEW_FACING
-        marker.action = Marker.ADD
-        marker.pose.position.x = 2.0  # Coloca la leyenda en el espacio del mapa
-        marker.pose.position.y = 0.0
-        marker.pose.position.z = 1.5
-        marker.pose.orientation.w = 1.0
-        marker.scale.z = 0.3  # Tamaño del texto
-        marker.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=1.0)
+        m = Marker()
+        m.header.frame_id = "base_footprint"
+        m.header.stamp = self.get_clock().now().to_msg()
+        m.ns = "legend_hud"
+        m.id = 400
+        m.type = Marker.TEXT_VIEW_FACING
+        m.action = Marker.ADD
+        m.pose.position.x = 2.0
+        m.pose.position.z = 1.5
+        m.pose.orientation.w = 1.0
+        m.scale.z = 0.3
+        m.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=1.0)
 
-        # Texto de la leyenda
-        marker.text = (
+        m.text = (
             "Leyenda:\n"
-            "🟡 Robot Base\n"
+            "🟡 Base Robot\n"
             "🟢 Persona Detectada\n"
             "🔵 Clusters Generales\n"
-            "🔴 Clusters Piernas"
+            "🔴 Clusters Piernas\n"
+            "⚙️ Modo Control"
         )
-
-        self.status_text_pub.publish(marker)  # Puedes usar el mismo publisher que para textos
-
+        self.status_text_pub.publish(m)
 
     def display_status(self):
-        self.publish_robot_marker()  # Publica solo una vez
-        self.publish_status_text_marker()  # Actualiza el texto en cada timer
-
-        # Publica la leyenda solo una vez
+        # RViz markers
+        self.publish_robot_marker()
+        self.publish_status_text_marker()
         if not hasattr(self, 'legend_published'):
             self.publish_legend_hud()
             self.legend_published = True
 
-        current_status = {
-            "Camera": self.camera_status,
+        # Consola
+        current = {
+            "Camera":    self.camera_status,
             "Detection": self.detection_status,
-            "Tracking": self.tracking_status,
-            "Person detected": "Yes" if self.person_detected else "No"
+            "Tracking":  self.tracking_status,
+            "Person":    "Sí" if self.person_detected else "No",
+            "Mode":      self.control_mode
         }
+        if current != self.previous_status:
+            self.get_logger().info("=== Estado del Sistema ===")
+            for k,v in current.items():
+                self.get_logger().info(f"{k}: {v}")
+            self.get_logger().info("==========================")
+            self.previous_status = current
 
-        if current_status != self.previous_status:
-            print("\n=== Estado del Sistema ===")
-            for key, value in current_status.items():
-                print(f"{key}: {value}")
-            print("==========================")
-            self.previous_status = current_status
-
+    # --- Shutdown handling ---
     def initialize_shutdown_listener(self):
         self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
-        self.shutdown_confirmation_publisher = self.create_publisher(Bool, '/shutdown_confirmation', 10)
+        self.shutdown_confirmation_pub = self.create_publisher(Bool, '/shutdown_confirmation', 10)
 
-    def shutdown_callback(self, msg):
+    def shutdown_callback(self, msg: Bool):
         if msg.data:
-            self.get_logger().info("Cierre del sistema detectado. Enviando confirmación.")
+            self.get_logger().info("Cierre detectado. Enviando confirmación.")
             self.stop_rviz()
-            try:
-                self.shutdown_confirmation_publisher.publish(Bool(data=True))
-            except Exception as e:
-                self.get_logger().error(f"Error al publicar confirmación de apagado: {e}")
-            finally:
-                self.destroy_node()
+            self.shutdown_confirmation_pub.publish(Bool(data=True))
+            self.destroy_node()
 
     def destroy_node(self):
         self.stop_rviz()
@@ -274,16 +281,14 @@ class UserInterfaceNode(Node):
 
 
 def main(args=None):
-    rclpy.init(args=args)
+    rclpy.init()
     node = UserInterfaceNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info("Nodo Interfaz de Usuario detenido manualmente.")
+        node.get_logger().info("UserInterfaceNode detenido con Ctrl-C.")
     finally:
         node.destroy_node()
-        rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()

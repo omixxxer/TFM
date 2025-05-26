@@ -73,7 +73,7 @@ class DetectionNode(Node):
         if data is not None:
             self.get_logger().info(f"{message} | {data}")
         else:
-            self.get_logger().info(message)
+            self.get_logger().debug(message)
 
     def lidar_callback(self, msg):
         # Filtro de mediana
@@ -213,12 +213,12 @@ class DetectionNode(Node):
 
 
 def main(args=None):
-    rclpy.init(args=args)
+    rclpy.init()
     node = DetectionNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info("Nodo de Detección detenido manualmente.")
+        node.get_logger().info("DetectionNode detenido con Ctrl-C.")
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+

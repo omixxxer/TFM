@@ -22,6 +22,9 @@ class TrackingNode(Node):
         # Estado del nodo de seguimiento
         self.tracking_enabled = False
 
+        # Inicializar shutdown
+        self.initialize_shutdown_listener()
+
         # Parámetro de evasión de obstáculos
         self.declare_parameter('obstacle_avoidance_enabled', True)
         self.obstacle_avoidance_enabled = self.get_parameter('obstacle_avoidance_enabled').value
@@ -177,6 +180,11 @@ class TrackingNode(Node):
     def publish_status(self, message):
         self.status_publisher.publish(String(data=message))
 
+    # --- Shutdown handling ---
+    def initialize_shutdown_listener(self):
+            self.create_subscription(Bool, '/system_shutdown', self.shutdown_callback, 10)
+            self.shutdown_confirmation_publisher = self.create_publisher(Bool, '/shutdown_confirmation', 10)
+
     def shutdown_callback(self, msg):
         if msg.data:
             self.get_logger().info("Shutdown detectado -> confirmando")
@@ -190,15 +198,15 @@ class TrackingNode(Node):
 
 
 def main(args=None):
-    rclpy.init(args=args)
+    rclpy.init()
     node = TrackingNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info("Tracking detenido manuelmente.")
+        node.get_logger().info("TrackingNode detenido con Ctrl-C.")
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
