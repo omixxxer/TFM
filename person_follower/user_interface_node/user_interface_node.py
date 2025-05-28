@@ -1,3 +1,4 @@
+# Librerías del sistema y ROS 2 necesarias
 import os
 import select
 import termios
@@ -17,32 +18,34 @@ class UserInterfaceNode(Node):
     def __init__(self):
         super().__init__('user_interface_node')
 
-        # Parámetros
+        # --- Parámetros configurables ---
         self.declare_parameter('enabled', True)
         self.declare_parameter('visualization_enabled', True)
         self.enabled             = self.get_parameter('enabled').value
         self.visualization_enabled = self.get_parameter('visualization_enabled').value
 
+        # Si el nodo no está habilitado, termina su ejecución
         if not self.enabled:
             self.get_logger().info("Nodo de Interfaz de Usuario desactivado.")
             return
 
-        # Estado del sistema
+        # --- Variables de estado ---
         self.person_detected   = False
-        self.camera_status     = "Desconocido"
-        self.detection_status  = "Desconocido"
-        self.tracking_status   = "Desconocido"
-        self.control_mode      = "AUTO"      # nuevo
+        self.camera_status     = "-"
+        self.detection_status  = "-"
+        self.tracking_status   = "-"
+        self.control_mode      = "-"     
         self.previous_status   = {}
+        self.teleop_status = "-"
 
         # Flags internos
         self.robot_marker_published = False
         self.last_cluster_publish_time = self.get_clock().now()
 
-        # Inicializar shutdown
+        # --- Inicialización de shutdown ---
         self.initialize_shutdown_listener()
 
-        # Subscripciones
+        # --- Subscripciones a tópicos del sistema ---
         self.create_subscription(String, '/camera/status',        self.camera_status_callback,    10)
         self.create_subscription(String, '/detection/status',     self.detection_status_callback, 10)
         self.create_subscription(String, '/tracking/status',      self.tracking_status_callback,  10)
@@ -50,10 +53,10 @@ class UserInterfaceNode(Node):
         self.create_subscription(Float32MultiArray, '/clusters/general', self.general_clusters_callback, 10)
         self.create_subscription(Float32MultiArray, '/clusters/legs',    self.leg_clusters_callback,     10)
         self.create_subscription(Point,  '/expected_person_position',    self.person_position_callback,  10)
-        # Nuevo: modo de control
         self.create_subscription(String, '/control/mode',         self.mode_callback,             10)
+        self.create_subscription(String, '/control/teleop_status', self.teleop_status_callback, 10)
 
-        # Publicadores
+        # --- Publicadores de visualización y diagnóstico ---
         self.marker_pub        = self.create_publisher(Marker,         '/visualization/person_marker', 10)
         self.leg_cluster_pub   = self.create_publisher(Marker,         '/visualization/leg_clusters',  10)
         self.general_cluster_pub = self.create_publisher(Marker,       '/visualization/general_clusters', 10)
@@ -61,10 +64,10 @@ class UserInterfaceNode(Node):
         self.status_text_pub   = self.create_publisher(Marker,         '/visualization/status_text',  10)
         self.diagnostic_pub    = self.create_publisher(DiagnosticArray,'/diagnostics',              10)
 
-        # Lanzar RViz
+        # --- Lanzar RViz ---
         self.start_rviz()
 
-        # Timer para refrescar HUD
+        # --- Temporizador para refrescar estado (consola + HUD) ---
         self.timer = self.create_timer(5.0, self.display_status)
 
         self.get_logger().info("Nodo de Interfaz de Usuario iniciado.")
@@ -91,10 +94,25 @@ class UserInterfaceNode(Node):
         self.detection_status = msg.data
 
     def tracking_status_callback(self, msg: String):
-        self.tracking_status = msg.data
+        status = msg.data.strip().lower()
+        if "enabled" in status:
+            self.tracking_status = "Enabled"
+        elif "disabled" in status:
+            self.tracking_status = "Disabled"
+        elif "ok" in status:
+            self.tracking_status = "Node OK"
+        elif "desactivado" in status:
+            self.tracking_status = "Nodo disabled"
+        else:
+            self.tracking_status = msg.data  # fallback
+
 
     def person_detected_callback(self, msg: Bool):
         self.person_detected = msg.data
+        
+    def teleop_status_callback(self, msg: String):
+        self.teleop_status = msg.data
+
 
     def mode_callback(self, msg: String):
         if msg.data != self.control_mode:
@@ -192,75 +210,53 @@ class UserInterfaceNode(Node):
         self.robot_marker_pub.publish(m)
         self.robot_marker_published = True
 
-    def publish_status_text_marker(self):
-        m = Marker()
-        m.header.frame_id = "base_footprint"
-        m.header.stamp = self.get_clock().now().to_msg()
-        m.ns = "status_text"
-        m.id = 200
-        m.type = Marker.TEXT_VIEW_FACING
-        m.action = Marker.ADD
-        m.pose.position.z = 2.5
-        m.pose.orientation.w = 1.0
-        m.scale.z = 0.1
-        m.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=1.0)
 
-        lines = [
-            f"Cámara: {self.camera_status}",
-            f"Detección: {self.detection_status}",
-            f"Tracking: {self.tracking_status}",
-            f"Persona: {'Sí' if self.person_detected else 'No'}",
-            f"Modo Control: {self.control_mode}"
-        ]
-        m.text = "\n".join(lines)
-        self.status_text_pub.publish(m)
-
-    def publish_legend_hud(self):
-        m = Marker()
-        m.header.frame_id = "base_footprint"
-        m.header.stamp = self.get_clock().now().to_msg()
-        m.ns = "legend_hud"
-        m.id = 400
-        m.type = Marker.TEXT_VIEW_FACING
-        m.action = Marker.ADD
-        m.pose.position.x = 2.0
-        m.pose.position.z = 1.5
-        m.pose.orientation.w = 1.0
-        m.scale.z = 0.3
-        m.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=1.0)
-
-        m.text = (
-            "Leyenda:\n"
-            "🟡 Base Robot\n"
-            "🟢 Persona Detectada\n"
-            "🔵 Clusters Generales\n"
-            "🔴 Clusters Piernas\n"
-            "⚙️ Modo Control"
-        )
-        self.status_text_pub.publish(m)
+    def publish_fixed_text_marker(self, ns, text, x, y, z, marker_id):
+        marker = Marker()
+        marker.header.frame_id = "base_footprint"  # o 'odom' si lo prefieres
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = ns
+        marker.id = marker_id
+        marker.type = Marker.TEXT_VIEW_FACING
+        marker.action = Marker.ADD
+        marker.pose.position.x = x
+        marker.pose.position.y = y
+        marker.pose.position.z = z
+        marker.pose.orientation.w = 1.0
+        marker.scale.z = 0.1
+        marker.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=1.0)
+        marker.text = text
+        self.status_text_pub.publish(marker)
 
     def display_status(self):
-        # RViz markers
+        # RViz: marcador HUD fijo frente al robot
         self.publish_robot_marker()
-        self.publish_status_text_marker()
-        if not hasattr(self, 'legend_published'):
-            self.publish_legend_hud()
-            self.legend_published = True
-
+    
+        base_x, base_y = 3.2, 1.0  # Panel frente al robot
+    
+        self.publish_fixed_text_marker("panel", f"Visual detection: {self.camera_status}", base_x, base_y, 1.5, 300)
+        self.publish_fixed_text_marker("panel", f"Detection: {self.detection_status}", base_x, base_y, 1.3, 301)
+        self.publish_fixed_text_marker("panel", f"Tracking: {self.tracking_status}", base_x, base_y, 1.1, 302)
+        self.publish_fixed_text_marker("panel", f"Person: {'Yes' if self.person_detected else 'No'}", base_x, base_y, 0.9, 303)
+        self.publish_fixed_text_marker("panel", f"Mode: {self.control_mode}", base_x, base_y, 0.7, 304)
+        self.publish_fixed_text_marker("panel", f"Teleop: {self.teleop_status}", base_x, base_y, 0.5, 305)
+    
         # Consola
         current = {
             "Camera":    self.camera_status,
             "Detection": self.detection_status,
             "Tracking":  self.tracking_status,
-            "Person":    "Sí" if self.person_detected else "No",
-            "Mode":      self.control_mode
+            "Person":    "Yes" if self.person_detected else "No",
+            "Mode":      self.control_mode,
+            "Teleop":    self.teleop_status
         }
+    
         if current != self.previous_status:
             self.get_logger().info("=== Estado del Sistema ===")
             for k,v in current.items():
                 self.get_logger().info(f"{k}: {v}")
             self.get_logger().info("==========================")
-            self.previous_status = current
+            self.previous_status = current.copy()
 
     # --- Shutdown handling ---
     def initialize_shutdown_listener(self):

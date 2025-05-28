@@ -55,9 +55,9 @@ class VisualDetectionNode(Node):
 
         if not self.enabled:
             self.get_logger().info("Nodo de Cámara desactivado.")
+            self.publish_status("Nodo desactivado.")
             return
 
-        self.get_logger().info("Inicializando nodo de Cámara")
 
         # Variables de estado
         self.bridge = CvBridge()
@@ -85,7 +85,7 @@ class VisualDetectionNode(Node):
             '/gesture_command',
             10
         )
-        self.status_pub = self.create_publisher(
+        self.status_publisher = self.create_publisher(
             String,
             '/camera/status',
             10
@@ -126,7 +126,8 @@ class VisualDetectionNode(Node):
         )
         self.mp_drawing = mp.solutions.drawing_utils
 
-        self.publish_status("Nodo Cámara con MediaPipe iniciado.")
+        self.get_logger().info("Inicializando nodo de Cámara")
+        self.publish_status("Nodo OK.")
 
     def image_callback(self, msg):
         # Controlar frecuencia de procesamiento
@@ -217,7 +218,7 @@ class VisualDetectionNode(Node):
             return None
 
     def publish_status(self, message):
-        self.status_pub.publish(String(data=message))
+        self.status_publisher.publish(String(data=message))
 
     def shutdown_callback(self, msg):
         if msg.data:

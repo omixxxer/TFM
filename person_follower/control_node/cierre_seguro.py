@@ -5,7 +5,6 @@ import tty
 import threading
 import time
 
-
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Bool, String
@@ -16,52 +15,46 @@ class ControlNode(Node):
     def __init__(self):
         super().__init__('control_node')
 
-        # ───────────── Parámetros iniciales ─────────────
+        # Parámetros
         self.declare_parameter('enabled', True)
         self.declare_parameter('slam_enabled', True)
         self.declare_parameter('camera_enabled', True)
-        self.enabled        = self.get_parameter('enabled').value
-        self.slam_enabled   = self.get_parameter('slam_enabled').value
+        self.enabled = self.get_parameter('enabled').value
+        self.slam_enabled = self.get_parameter('slam_enabled').value
         self.ignore_gesture = not self.get_parameter('camera_enabled').value
 
         if not self.enabled:
             self.get_logger().info("Nodo de Control desactivado.")
             return
 
-        # ───────────── Estados de la FSM ─────────────
+        # FSM: INIT, IDLE, TRACKING, MANUAL, SHUTDOWN
         self.states = ['INIT', 'IDLE', 'TRACKING', 'MANUAL', 'SHUTDOWN']
         self.current_state = 'INIT'
 
-        # ───────────── Variables de estado ─────────────
-        self.person_detected        = False
-        self.user_authorized        = self.ignore_gesture
+        # Flags
+        self.person_detected = False
+        self.user_authorized = self.ignore_gesture
         self.tracking_service_ready = False
-        self._last_tracking_enable  = None
+        self._last_tracking_enable = None
         self.shutdown_requested = False
 
-        # ───────────── Terminal settings ─────────────
+        # Terminal settings
         self.tty_fd = None
         self._original_tty_attrs = None
 
-        # ───────────── Subscripciones ─────────────
-        self.create_subscription(Bool,   '/person_detected',       self.person_detected_callback,       10)
-        self.create_subscription(Bool,   '/shutdown_confirmation', self.shutdown_confirmation_callback, 10)
-        self.create_subscription(Twist,  '/tracking/velocity_cmd', self.velocity_callback,              10)
-        self.create_subscription(String, '/gesture_command',       self.gesture_command_callback,       10)
+        # Subscripciones
+        self.create_subscription(Bool, '/person_detected', self.person_detected_callback, 10)
+        self.create_subscription(Bool, '/shutdown_confirmation', self.shutdown_confirmation_callback, 10)
+        self.create_subscription(Twist, '/tracking/velocity_cmd', self.velocity_callback, 10)
+        self.create_subscription(String, '/gesture_command', self.gesture_command_callback, 10)
 
-        # ───────────── Publicadores ─────────────
-        self.shutdown_publisher         = self.create_publisher(Bool,  '/system_shutdown', 10)
-        self.cmd_vel_publisher          = self.create_publisher(Twist, '/cmd_vel',         10)
-        self.mode_publisher             = self.create_publisher(String, '/control/mode', 10)               # NUEVO: modo AUTO o MANUAL
-        self.teleop_status_publisher    = self.create_publisher(String, '/control/teleop_status', 10)      # NUEVO: estado de control manual
-
-        # ───────────── Cliente del servicio de tracking ─────────────
+        # Publicadores y cliente de tracking
+        self.shutdown_publisher = self.create_publisher(Bool, '/system_shutdown', 10)
+        self.cmd_vel_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
         self.tracking_client = self.create_client(SetBool, 'enable_tracking')
         self.wait_for_service(self.tracking_client, 'enable_tracking')
 
         self.get_logger().info("Nodo de Control iniciado.")
-
-        # ───────────── Iniciar escucha del teclado y cambiar a estado IDLE ─────────────
         self.start_keyboard_listener()
         self.transition_to('IDLE')
 
@@ -72,7 +65,6 @@ class ControlNode(Node):
         self.get_logger().info(f"Servicio {name} listo.")
         self.tracking_service_ready = True
 
-    # Publicar velocidad recibida desde el nodo de seguimiento (si procede)
     def velocity_callback(self, msg):
         if self.current_state == 'MANUAL':
             return
@@ -81,7 +73,6 @@ class ControlNode(Node):
         else:
             self.stop_robot()
 
-    # Procesar comandos gestuales
     def gesture_command_callback(self, msg):
         if self.ignore_gesture:
             return
@@ -96,7 +87,6 @@ class ControlNode(Node):
             if self.current_state == 'TRACKING':
                 self.transition_to('IDLE')
 
-    # Iniciar hilo para escuchar teclado en modo MANUAL
     def start_keyboard_listener(self):
         thread = threading.Thread(target=self.keyboard_loop, daemon=True)
         thread.start()
@@ -136,7 +126,6 @@ class ControlNode(Node):
                     self.shutdown_requested = True
                     break  # salir del bucle
 
-                # Cambiar modo de operación
                 if ch.lower() == 'q':
                     if self.current_state == 'MANUAL':
                         self.get_logger().info(">> MODO AUTO")
@@ -146,55 +135,37 @@ class ControlNode(Node):
                         self.transition_to('MANUAL')
                     continue
 
-                # Control manual de movimiento
                 if self.current_state == 'MANUAL':
                     cmd = Twist()
-                    status = ""
                     if ch.lower() == 'w':
-                        cmd.linear.x = 0.5
-                        status = "Avanzando"
+                        cmd.linear.x = 0.2
                     elif ch.lower() == 's':
-                        cmd.linear.x = -0.5
-                        status = "Retrocediendo"
+                        cmd.linear.x = -0.2
                     elif ch.lower() == 'a':
-                        cmd.angular.z = 0.8
-                        status = "Giro izquierda"
+                        cmd.angular.z = 0.5
                     elif ch.lower() == 'd':
-                        cmd.angular.z = -0.8
-                        status = "Giro derecha"
+                        cmd.angular.z = -0.5
                     elif ch.lower() == 'x':
-                        status = "Detenido"
+                        pass
                     else:
                         continue
                     self.cmd_vel_publisher.publish(cmd)
-                    self.teleop_status_publisher.publish(String(data=status))
-                    self.get_logger().info(f"[MANUAL] {status}")
+                    self.get_logger().info(f"[MANUAL] lin={cmd.linear.x:.2f} ang={cmd.angular.z:.2f}")
         finally:
             # Restaurar terminal solo en main(), aquí solo invertir shutdown
-                    if self.shutdown_requested:
-                        self.notify_shutdown()
+            if self.shutdown_requested:
+                self.notify_shutdown()
 
-    # Detener robot (enviar Twist vacío)
     def stop_robot(self):
         self.cmd_vel_publisher.publish(Twist())
 
-    # Transiciones de estado
     def transition_to(self, new_state):
         if new_state not in self.states:
             self.get_logger().error(f"Estado inválido: {new_state}")
             return
-
         self.get_logger().info(f"Transición {self.current_state} → {new_state}")
         self.current_state = new_state
 
-        # Publicar modo de control actual
-        if new_state == 'MANUAL':
-            self.publish_mode("MANUAL")
-            self.user_authorized = False
-        elif new_state in ['IDLE', 'TRACKING']:
-            self.publish_mode("AUTO")
-
-        # Acciones por estado
         if new_state == 'IDLE':
             self.get_logger().info(">> IDLE")
         elif new_state == 'TRACKING':
@@ -204,14 +175,12 @@ class ControlNode(Node):
         elif new_state == 'SHUTDOWN':
             self.notify_shutdown()
 
-    # Determinar si pasar a TRACKING o IDLE automáticamente
     def transition_to_auto(self):
         if self.person_detected and self.user_authorized:
             self.transition_to('TRACKING')
         else:
             self.transition_to('IDLE')
 
-    # Iniciar seguimiento activando el servicio
     def start_tracking(self):
         if not self.tracking_service_ready:
             self.get_logger().error("Servicio tracking no listo; volviendo a IDLE.")
@@ -219,7 +188,6 @@ class ControlNode(Node):
         self.toggle_tracking(True)
         self.get_logger().info(">> TRACKING")
 
-    # Apagar el sistema
     def notify_shutdown(self):
         self.shutdown_publisher.publish(Bool(data=True))
         self.get_logger().info("Notificando shutdown a los nodos secundarios.")
@@ -227,7 +195,6 @@ class ControlNode(Node):
         self.get_logger().info("Cerrando ControlNode.")
         self.destroy_node()
 
-    # Procesar detección de persona
     def person_detected_callback(self, msg):
         self.person_detected = msg.data
         if self.current_state == 'IDLE' and self.person_detected and self.user_authorized:
@@ -237,9 +204,8 @@ class ControlNode(Node):
 
     def shutdown_confirmation_callback(self, msg):
         if msg.data:
-            self.transition_to('SHUTDOWN')
+            self.get_logger().info("Confirmación de shutdown recibida.")
 
-    # Llamada al servicio para activar/desactivar tracking
     def toggle_tracking(self, enable):
         self._last_tracking_enable = enable
         req = SetBool.Request()
@@ -247,23 +213,14 @@ class ControlNode(Node):
         fut = self.tracking_client.call_async(req)
         fut.add_done_callback(self.handle_tracking_response)
 
-    # Publicar el modo de control
-    def publish_mode(self, mode):
-        self.mode_publisher.publish(String(data=mode))
-
-    # Procesar respuesta del servicio de tracking
     def handle_tracking_response(self, future):
         try:
             future.result()
-            if self._last_tracking_enable:
-                self.get_logger().info("Tracking habilitado.")
-            else:
-                self.get_logger().info("Tracking deshabilitado.")
+            msg = "Tracking habilitado." if self._last_tracking_enable else "Tracking deshabilitado."
+            self.get_logger().info(msg)
         except Exception as e:
             self.get_logger().error(f"Error en servicio tracking: {e}")
 
-
-# Punto de entrada del nodo
 def main(args=None):
     rclpy.init(args=args)
     node = ControlNode()

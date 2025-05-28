@@ -154,10 +154,10 @@ Visualization Manager:
       Use Timestamp: false
       Value: false
     - Class: rviz_default_plugins/Marker
-      Enabled: false
+      Enabled: true
       Name: Marker
       Namespaces:
-        {}
+        panel: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -165,7 +165,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /visualization/status_text
-      Value: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -199,10 +199,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.6553983092308044
+      Pitch: 0.6953982710838318
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz_default_plugins)
-      Yaw: 0.7103986144065857
+      Yaw: 4.913583755493164
     Saved: ~
 Window Geometry:
   Camera View:

@@ -24,8 +24,8 @@ class DetectionNode(Node):
         self.declare_parameter('max_leg_cluster_size', 80)
         self.declare_parameter('min_leg_radius', 0.01)
         self.declare_parameter('max_leg_radius', 0.05)
-        self.declare_parameter('min_leg_distance', 0.02)
-        self.declare_parameter('max_leg_distance', 0.4)
+        self.declare_parameter('min_leg_distance', 0.04)
+        self.declare_parameter('max_leg_distance', 0.3)
         self.declare_parameter('median_filter_window', 7)
 
         # Carga de parámetros
@@ -46,6 +46,7 @@ class DetectionNode(Node):
 
         if not self.enabled:
             self.get_logger().info("Nodo de Detección desactivado.")
+            self.publish_status("Nodo desactivado.")
             return
 
         # Publicadores y suscriptores
@@ -63,7 +64,7 @@ class DetectionNode(Node):
         self.visual_count = 0
         self.last_visual_time = self.get_clock().now()
 
-        self.publish_status("Nodo de Detección iniciado.")
+        self.publish_status("Nodo OK.")
         self.initialize_shutdown_listener()
 
     def publish_status(self, message):

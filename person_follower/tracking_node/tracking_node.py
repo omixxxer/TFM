@@ -17,6 +17,7 @@ class TrackingNode(Node):
 
         if not self.enabled:
             self.get_logger().info("Nodo de Seguimiento desactivado.")
+            self.publish_status("Nodo desactivado.")
             return
 
         # Estado del nodo de seguimiento
@@ -62,12 +63,14 @@ class TrackingNode(Node):
         self.previous_vx = 0.0
 
         self.get_logger().info("Nodo de Seguimiento iniciado")
+        self.publish_status("Nodo OK.")
 
     def enable_tracking_callback(self, request, response):
         self.tracking_enabled = request.data
         response.success = True
-        response.message = f"Tracking {'enabled' if self.tracking_enabled else 'disabled'}"
+        response.message = f"{'Enabled' if self.tracking_enabled else 'Disabled'}"
         self.get_logger().info(response.message)
+        self.publish_status(response.message) 
         return response
 
     def detection_callback(self, msg):
