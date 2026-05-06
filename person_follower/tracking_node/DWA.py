@@ -1,3 +1,6 @@
+# Copyright 2026 omixxxer
+# Author: omixxxer
+# SPDX-License-Identifier: Apache-2.0
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, Point

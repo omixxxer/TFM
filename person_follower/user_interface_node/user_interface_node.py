@@ -1,3 +1,7 @@
+# Copyright 2026 omixxxer
+# Author: omixxxer
+# SPDX-License-Identifier: Apache-2.0
+
 # Librerías del sistema y ROS 2 necesarias
 import os
 import select

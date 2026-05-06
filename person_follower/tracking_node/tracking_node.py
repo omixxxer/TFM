@@ -1,3 +1,7 @@
+# Copyright 2026 omixxxer
+# Author: omixxxer
+# SPDX-License-Identifier: Apache-2.0
+
 import rclpy
 import numpy as np
 import math
