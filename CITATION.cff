@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+title: "TFM - Person Follower for TurtleBot2 (ROS 2)"
+message: "If you use this repository, please cite it using the metadata below."
+type: software
+authors:
+  - name: "omixxxer"
+repository-code: "https://github.com/omixxxer/TFM"
+license: "Apache-2.0"
+version: "0.0.1"
+date-released: "2026-05-06"
+keywords:
+  - ros2
+  - turtlebot2
+  - person-following
+  - tfm

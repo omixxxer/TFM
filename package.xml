@@ -4,7 +4,7 @@
   <name>person_follower</name>
   <version>0.0.1</version>
   <description>Package for person following using LIDAR and camera modules.</description>
-  <maintainer email="al364109@uji.es">jmartinez</maintainer>
+  <maintainer email="ximomartinez98@gmail.com">omixxxer</maintainer>
   <license>Apache-2.0</license>
 
   <!-- Dependencias de compilación -->

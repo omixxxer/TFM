@@ -16,10 +16,10 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='omixer',
-    maintainer_email='al364109@uji.es',
+    maintainer='omixxxer',
+    maintainer_email='ximomartinez98@gmail.com',
     description='Package for person-following robot project',
-    license='TODO: License declaration',
+    license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
